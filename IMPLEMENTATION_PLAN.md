@@ -1,5 +1,28 @@
 # Forensic Auditor implementation plan
 
+## Student-materials delivery — authoritative contract update
+
+The September 12 student-materials pack is now preserved verbatim in `specs/student-materials/`. It supplements the original brief with exact input/output and judging requirements. This section supersedes earlier compatibility and completion claims. Preserve the existing CSV workflow while adding an official SQLite workflow; never reinterpret a full double-entry ledger as the old obligation subledger.
+
+Delivery sequence and acceptance gates:
+
+1. Read-only, bounded SQLite ingestion of all eight official tables, original primary keys, CFDI field names, exact local centavo arithmetic, source hashes and retrievable rows. Accept runtime paths and browser uploads. Reject invalid databases; never execute uploaded SQL or document instructions.
+2. Five distinct scheme investigations: phantom vendors, employee kickbacks, round-tripping, approval threshold splitting, and inflated revenue. Treat statistical signals and cycles as leads. Require documentary corroboration, inspect refunds/permissions/contradictions, and abstain when a supplied estate cannot substantiate a predicate. Typed documentary conventions in contract text are optional supported evidence, not assumed judge data or hidden labels.
+3. Deterministic evidence gate and official submission serializer: prefixed entities, three or more source exhibits, connected cited trails, confidence, exact positive pesos and official per-table 2% reconciliation. Revalidate before publication; narrow or decline findings incompatible with the official amount definition instead of changing arithmetic.
+4. Standalone HTML with ordered required sections, rendered SVG trails, exhibit tables, declined-lead tools and closer, architecture/limits and reproduction instructions. Official identity-bearing artifacts are explicit local judge exports; masked views remain the default. Persist completed runs with estate identity and render/replay without network or new model calls.
+5. Independent generator/evaluation tooling outside the runtime package, official answer keys and results CSV, named disjoint tuning/reporting seeds, varied/entangled schemes and ten decoys, meaningful removal/benign/format/API/replay tests. Record measured model calls, MXN cost and wall time. Separate stable case content from measured run telemetry; exact replay preserves original telemetry.
+6. Integrate the official flow into the existing React/FastAPI interface and CLI. Expose case-grounded questions from saved decisions; verify upload, investigation, evidence, export, cancellation/bounds and offline replay. Retain OpenRouter privacy restrictions and clearly label deterministic offline review. Live provider operation and a timed human three-minute rehearsal must be measured before claiming them complete.
+
+No fixture success establishes detection of arbitrary hidden schemes. Missing authentic ownership, approval policies, delivery evidence or commercial purpose must remain visible limitations. No invented policy threshold, inferred employee identity from shared bank institution, or automatic SAT accusation is permitted.
+
+### Delivered and verified in this increment
+
+The official path is implemented in `forensic_auditor/official/`: read-only estate ingestion, five narrow evidence predicates, source-byte revalidation, official submission serialization, rendered SVG case files, explicit original versus masked presentation, replay, saved-case Q&A, CLI and React/FastAPI integration. Optional AI scheduling enforces inspection/alternative/conclusion order using aliases only, records provider-reported usage cost with a supplied FX source, and refuses to publish unreviewed candidates after failures. Legacy demo generation now returns records through an isolated subprocess; runtime imports no evaluator/generator answer builders.
+
+Automated verification: 116 tests plus 3 subtests passed; TypeScript, frontend money checks and production build passed. The supplied validator passed both structure and estate-reference/amount checks on the generated five-finding submission. Official evaluation across five named reporting seeds found 19/19 planted schemes and accused 0/50 decoys, with exact matched scheme amounts; results cover only declared fictional supported-contract fixtures. Browser upload, five-finding output, rendered trails and saved-case Q&A were exercised. Offline replay reproduced the saved submission and HTML without model/network calls.
+
+Still unverified externally: authenticated live provider usage/billing/latency and a timed human three-minute AI rehearsal. The server reports a configured model/key, but no credential or live request was needed for these offline checks. Required live-cost conversion needs a supplied dated USD/MXN rate/source; the implementation does not invent one. Unknown prose and unsupported accounting semantics are explicit detector limits, not completed generalized fraud understanding. See `docs/official_estates.md` and `docs/verification.md`.
+
 ## Implementation status — September 12, 2026
 
 The updated execution plan below has been implemented in the existing package: typed model privacy projection; masked views and both exports with explicit local original access; dataset deletion; independent bounded flow discovery; v2 contracts/ownership/attestations/sales records; service-payment, prohibited-benefit and revenue-recognition predicates; per-category deduplicated amounts; audit exports; expanded extractive Q&A; multi-scheme fictional injection; and a versioned public-API holdout evaluator. The user changed the selected model to `nvidia/nemotron-3-ultra-550b-a55b:free`; `.env` still takes precedence through server configuration.

@@ -304,3 +304,95 @@ def test_fresh_zip_through_public_api_to_export_and_question():
         assert result["evidence"]
         assert "centavos" in result["answer"]
         assert "text/html" in client.get(f"{prefix}/export/html").headers["content-type"]
+
+
+def test_timeout_error_recovery_and_resume_with_more_time():
+    data, truth = demo()
+    call_count = 0
+    def failing_first(messages, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise OpenRouterError("OpenRouter request exceeded its 11.516s timeout. Raise OPENROUTER_TIMEOUT_SECONDS (maximum 60) or give the investigation a longer time budget.")
+        context = json.loads(messages[1]["content"])
+        lead = context["leads"][0]["id"]
+        tool = context["leads"][0]["available_tools"][0]
+        return json.dumps({"lead_id": lead, "tool": tool})
+
+    job = Investigation(data, mode="ai", seconds=90, model_chat=failing_first, synthetic=True)
+    job.run()
+    case = job.snapshot()
+    assert case["status"] == "incomplete"
+    assert case["error_type"] == "timeout"
+    assert case["can_resume"] is True
+    assert "timeout" in case["completion_reason"].lower()
+
+    # Resume with more time (120s)
+    job.prepare_resume(mode="ai", seconds=120)
+    assert job.seconds == 120
+    assert job.resume_count == 1
+    assert job.snapshot()["status"] == "queued"
+    assert "more time" in job.snapshot()["recovery"]
+
+    job.run()
+    resumed_case = job.snapshot()
+    assert resumed_case["status"] == "complete"
+    assert resumed_case["totals"]["MXN"] == truth["expected_excess_centavos"]
+    assert any(event["tool"] == "resume_review" for event in resumed_case["timeline"])
+
+
+def test_connection_error_recovery_and_offline_completion():
+    data, truth = demo()
+    def connection_drop(messages, **kwargs):
+        raise OpenRouterError("OpenRouter connection failed. Check this machine's network access to openrouter.ai.")
+
+    job = Investigation(data, mode="ai", seconds=90, model_chat=connection_drop, synthetic=True)
+    job.run()
+    case = job.snapshot()
+    assert case["status"] == "incomplete"
+    assert case["error_type"] == "connection_error"
+    assert case["can_resume"] is True
+
+    # User chooses to complete remaining review offline
+    job.prepare_resume(mode="offline")
+    assert job.mode == "offline"
+    assert "offline" in job.snapshot()["recovery"].lower()
+
+    job.run()
+    finished_case = job.snapshot()
+    assert finished_case["status"] == "offline_complete"
+    assert finished_case["totals"]["MXN"] == truth["expected_excess_centavos"]
+
+
+def test_api_investigate_resume_endpoint():
+    from forensic_auditor.api import app
+    client = TestClient(app)
+    demo_resp = client.post("/api/datasets/demo", json={"seed": 101, "clean": False, "scenario": "excess"})
+    assert demo_resp.status_code == 200
+    sid = demo_resp.json()["session_id"]
+    prefix = f"/api/datasets/{sid}"
+
+    # Verify resume fails if no job exists yet
+    bad_resume = client.post(f"{prefix}/investigate", json={"mode": "ai", "resume": True})
+    assert bad_resume.status_code == 409
+
+    # Start an offline investigation with max_steps=1 to leave leads pending and make it incomplete
+    client.post(f"{prefix}/investigate", json={"mode": "offline", "max_steps": 1})
+    for _ in range(50):
+        case = client.get(f"{prefix}/case").json()
+        if case["status"] not in ("queued", "running"):
+            break
+        time.sleep(0.05)
+    assert case["status"] == "incomplete"
+    assert case["can_resume"] is True
+
+    # Resume via API with additional seconds
+    resume_resp = client.post(f"{prefix}/investigate", json={"mode": "offline", "resume": True, "seconds": 120})
+    assert resume_resp.status_code == 200
+    for _ in range(50):
+        case = client.get(f"{prefix}/case").json()
+        if case["status"] not in ("queued", "running"):
+            break
+        time.sleep(0.05)
+    assert case["status"] == "offline_complete"
+

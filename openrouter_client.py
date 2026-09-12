@@ -2,6 +2,9 @@
 
 import json
 import os
+import math
+import time
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -16,6 +19,28 @@ PRIVACY_VERSION = "openrouter-deny-zdr-2026-09-12"
 
 class OpenRouterError(RuntimeError):
     """Safe error for callers; excludes credentials and provider response bodies."""
+
+
+class OpenRouterRateLimit(OpenRouterError):
+    def __init__(self, retry_after=None):
+        self.retry_after = retry_after
+        wait = (f"The provider requested a wait of {retry_after} seconds." if retry_after is not None else
+                "The provider did not supply a retry time; this may be a temporary throttle or a longer quota limit.")
+        super().__init__("OpenRouter HTTP 429: The selected model or account is rate-limited. " + wait +
+                         " Resume later or explicitly finish with offline evidence review. Repeated restarts will not reset the provider quota.")
+
+
+def retry_after_seconds(value):
+    """Accept only standard numeric/date Retry-After values; never echo header text."""
+    if not value:
+        return None
+    try:
+        if str(value).strip().isdigit():
+            return min(int(value), 7 * 86400)
+        when = parsedate_to_datetime(str(value)).timestamp()
+        return max(0, min(math.ceil(when - time.time()), 7 * 86400))
+    except (ValueError, TypeError, OverflowError):
+        return None
 
 
 def settings() -> dict:
@@ -44,7 +69,7 @@ def public_settings() -> dict:
 
 
 def chat(messages: list[dict[str, str]], *, max_tokens: int = 2048, timeout: float = 60,
-         synthetic: bool = False) -> str:
+         synthetic: bool = False, usage_callback=None) -> str:
     """Load server config and make one bounded, non-streaming API request.
 
     Environment variables take precedence over the repository's .env file.
@@ -82,13 +107,15 @@ def chat(messages: list[dict[str, str]], *, max_tokens: int = 2048, timeout: flo
             payload = json.load(response)
     except HTTPError as error:
         status = error.code
+        retry_after = retry_after_seconds(error.headers.get("Retry-After")) if status == 429 and error.headers else None
         error.close()
+        if status == 429:
+            raise OpenRouterRateLimit(retry_after) from None
         detail = {400: "Check the exact model ID and supported parameters.",
                   401: "API key is missing, invalid or expired. Check server .env.",
                   402: "The account or selected endpoint requires credit.",
                   403: "Access denied. Check model eligibility and account privacy settings.",
                   404: "No eligible endpoint. Check model ID and no-collection/ZDR support; privacy restrictions were not relaxed.",
-                  429: "Free-tier or provider rate limit reached. Wait before starting a new investigation.",
                   502: "Provider returned an error. Try again later.",
                   503: "No provider is currently available under the configured routing policy."}.get(status, "Provider request failed. Try again later.")
         raise OpenRouterError(f"OpenRouter HTTP {status}: {detail}") from None
@@ -111,6 +138,9 @@ def chat(messages: list[dict[str, str]], *, max_tokens: int = 2048, timeout: flo
             raise ValueError("Empty response")
     except (KeyError, IndexError, TypeError, ValueError, AttributeError):
         raise OpenRouterError("OpenRouter returned an incomplete or invalid text response.") from None
+    if usage_callback is not None:
+        usage = payload.get("usage", {})
+        usage_callback({key: usage.get(key) for key in ("cost", "prompt_tokens", "completion_tokens")})
     return content
 
 

@@ -12,13 +12,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from .data import load_zip
-from .demo import generate
+from .synthetic_records import records as demo_records
 from .investigation import Investigation, answer
 from .reporting import export_case, printable
 from .privacy import Presentation
 from openrouter_client import public_settings, chat, OpenRouterError
 
 app = FastAPI(title="The Forensic Auditor", version="0.1.0")
+from .official.api import router as official_router
+app.include_router(official_router)
 
 
 @app.middleware("http")
@@ -45,8 +47,9 @@ class DemoRequest(StrictRequest):
 
 class StartRequest(StrictRequest):
     mode: Literal["offline", "ai"] = "offline"
+    resume: bool = False
     max_steps: int = Field(default=60, ge=1, le=120)
-    seconds: int = Field(default=90, ge=5, le=120)
+    seconds: int = Field(default=90, ge=5, le=300)
 
 
 class QuestionRequest(StrictRequest):
@@ -101,15 +104,13 @@ def check_model():
 
 @app.post("/api/datasets/demo")
 def demo(body: DemoRequest):
-    from .scenarios import generate_scenario
-    content, _ = generate(body.seed, body.clean) if body.scenario == "legacy" else generate_scenario(body.seed, body.scenario, body.clean)
+    content = demo_records(body.seed, body.scenario, body.clean)
     return register(content, synthetic=True)
 
 
 @app.get("/api/demo.zip")
 def demo_download(seed: int = 2026, clean: bool = False, scenario: Literal["legacy", "all", "excess", "service", "return", "sale", "cycle"] = "all"):
-    from .scenarios import generate_scenario
-    content, _ = generate(seed, clean) if scenario == "legacy" else generate_scenario(seed, scenario, clean)
+    content = demo_records(seed, scenario, clean)
     return Response(content, media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="company-records.zip"'})
 
 
@@ -139,7 +140,16 @@ def start(session_id: str, body: StartRequest):
         active = sum(item["job"] is not None and item["job"].snapshot()["status"] in ("queued", "running") for item in sessions.values())
         if active >= 2:
             raise HTTPException(429, "Two investigations are already active. Wait or cancel one.")
-        job = Investigation(session["data"], body.mode, body.max_steps, body.seconds, synthetic=session["synthetic"])
+        if body.resume:
+            job = session["job"]
+            if job is None:
+                raise HTTPException(409, "No incomplete investigation is available to resume.")
+            try:
+                job.prepare_resume(body.mode, seconds=body.seconds, max_steps=body.max_steps)
+            except ValueError as error:
+                raise HTTPException(409, str(error)) from None
+        else:
+            job = Investigation(session["data"], body.mode, body.max_steps, body.seconds, synthetic=session["synthetic"])
         session["job"] = job
         def execute():
             try:

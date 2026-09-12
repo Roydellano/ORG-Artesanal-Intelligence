@@ -2,6 +2,8 @@
 
 ## Scope and source of truth
 
+- The supplied student-materials pack is preserved in `specs/student-materials/` and supplements the brief with exact estate/submission formats, five scheme enums, offline replay, case-file structure and evaluation requirements. `docs/official_estates.md` describes the implemented SQLite path and its explicit documentary/semantic limits. The original CSV path remains separate; do not confuse its contracts or exports with the official judge format.
+
 This file applies throughout this repository. Read it before making changes.
 
 - [HackMTY challenge brief](HackMTY_2026_Infosys_Challenge_Forensic.md) is the source of truth for challenge requirements. It is the user's Markdown conversion of the supplied PDF extract.

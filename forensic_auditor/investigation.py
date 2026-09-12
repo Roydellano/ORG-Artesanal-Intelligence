@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from openrouter_client import chat, OpenRouterError, settings, DEFAULT_MODEL, PRIVACY_VERSION
+from openrouter_client import chat, OpenRouterError, OpenRouterRateLimit, settings, DEFAULT_MODEL, PRIVACY_VERSION
 from .privacy import ModelProjection, POLICY
 from .schemes import discover, assess, bank_trace, conclude_scheme, totals as category_totals
 from .data import Dataset
@@ -18,9 +18,7 @@ from .engine import (LIMITATIONS, check_support, conclude, generate_leads,
                      lookup_supplier, reconcile, test_alternative, trace_funds)
 
 PROMPT_VERSION = "investigator-v2"
-# Below settings()' own minimum per-request timeout a model call cannot complete,
-# and its socket timeout would surface as a connection failure instead of budget exhaustion.
-MIN_MODEL_SECONDS = 5
+MIN_MODEL_SECONDS = 15
 TOOLS = {"lookup_supplier": lookup_supplier, "reconcile": reconcile,
          "check_support": check_support, "test_alternative": test_alternative, "trace_funds": trace_funds}
 SYSTEM = """You are a forensic investigation controller reviewing pseudonymous structured facts.
@@ -50,6 +48,12 @@ class Investigation:
         self.cancelled = threading.Event()
         self.lock = threading.RLock()
         self.cache = {}  # Per investigation only; never shared between uploads or users.
+        self.seen = set()
+        self.completed_tools = {}
+        self.results = {}
+        self.actions = []
+        self.resume_pending = False
+        self.resume_count = 0
         self.model = settings()["model"] if mode == "ai" else DEFAULT_MODEL
         self.case = {"dataset_id": data.identity, "version": "case-v2", "mode": mode, "status": "queued",
                      "model": self.model if mode == "ai" else None, "prompt_version": PROMPT_VERSION,
@@ -86,23 +90,30 @@ class Investigation:
 
     def run(self) -> None:
         started = time.monotonic()
-        seen = set()
-        completed_tools = {}
-        results = {}
-        actions = []
+        seen = self.seen
+        completed_tools = self.completed_tools
+        results = self.results
+        actions = self.actions
         try:
             with self.lock:
                 self.case["status"] = "running"
-            leads, discovery = discover(self.data, started + self.seconds, self.cancelled)
+            if self.resume_pending:
+                leads, discovery = self.case["leads"], self.case["discovery"]
+                self.resume_pending = False
+            else:
+                leads, discovery = discover(self.data, started + self.seconds, self.cancelled)
             with self.lock:
                 self.case["leads"] = leads
                 self.case["discovery"] = discovery
-            for step in range(self.max_steps):
+            for step in range(max(0, self.max_steps - len(seen))):
                 if self.cancelled.is_set():
                     self._finish("cancelled", "Cancelled by the reviewer.")
                     break
                 remaining = self.seconds - (time.monotonic() - started)
                 if remaining <= 0:
+                    with self.lock:
+                        self.case["error_type"] = "timeout"
+                        self.case["can_resume"] = self.resume_count < 5
                     self._finish("incomplete", "Investigation time budget reached.")
                     break
                 pending = [lead for lead in leads if lead["state"] in ("pending", "investigating")]
@@ -112,7 +123,10 @@ class Investigation:
                 if self.mode == "ai":
                     if not actions:
                         if remaining < MIN_MODEL_SECONDS:
-                            self._finish("incomplete", "Investigation time budget reached.")
+                            with self.lock:
+                                self.case["error_type"] = "timeout"
+                                self.case["can_resume"] = self.resume_count < 5
+                            self._finish("incomplete", "Investigation time budget reached. Continue with more time to proceed.")
                             break
                         payload = self.projection.context(pending, completed_tools, results, self.available)
                         if len(payload) > 80_000:
@@ -124,7 +138,8 @@ class Investigation:
                             config = settings()
                             if config["model"] != self.model:
                                 raise OpenRouterError("Model configuration changed during this investigation. Start a new case to use the new model.")
-                            kwargs = {"max_tokens": config["max_tokens"], "timeout": min(config["timeout"], remaining)}
+                            call_timeout = config["timeout"]
+                            kwargs = {"max_tokens": config["max_tokens"], "timeout": min(call_timeout, max(15.0, remaining))}
                             if self.model_chat is chat:
                                 kwargs["synthetic"] = self.synthetic
                             self.cache[key] = self.model_chat([{"role": "system", "content": SYSTEM},
@@ -138,6 +153,7 @@ class Investigation:
                         if not isinstance(batch, list) or not 1 <= len(batch) <= 6:
                             raise ValueError("Invalid action batch")
                         actions = [Action.model_validate(value) for value in batch]
+                        self.actions = actions
                         if len({a.lead_id for a in actions}) != len(actions):
                             raise ValueError("Batch must contain distinct leads")
                         for proposed in actions:
@@ -151,6 +167,10 @@ class Investigation:
                     sequence = self.sequence(lead)
                     action = Action(lead_id=lead["id"], tool=next(tool for tool in sequence if (lead["id"], tool) not in seen))
                 if self.cancelled.is_set() or time.monotonic() - started >= self.seconds:
+                    with self.lock:
+                        if not self.cancelled.is_set():
+                            self.case["error_type"] = "timeout"
+                            self.case["can_resume"] = self.resume_count < 5
                     self._finish("cancelled" if self.cancelled.is_set() else "incomplete", "Stopped before applying the next action.")
                     break
                 lead = next((lead for lead in pending if lead["id"] == action.lead_id), None)
@@ -187,17 +207,68 @@ class Investigation:
                     self.event(lead["id"], action.tool, result)
             else:
                 unresolved = any(lead["state"] in ("pending", "investigating") for lead in leads)
+                if unresolved:
+                    with self.lock:
+                        self.case["error_type"] = "step_budget"
+                        self.case["can_resume"] = self.resume_count < 5
                 self._finish("incomplete" if unresolved or discovery["truncated"] else ("complete" if self.mode == "ai" else "offline_complete"),
                              "Step budget reached." if unresolved else ("Discovery truncated." if discovery["truncated"] else "All generated leads reviewed."))
-        except OpenRouterError as error:
+        except OpenRouterRateLimit as error:
+            with self.lock:
+                self.case["error_type"] = "rate_limited"
+                self.case["retry_at"] = time.time() + error.retry_after if error.retry_after is not None else None
+                self.case["can_resume"] = self.resume_count < 5
             self._finish("incomplete", str(error))
+        except OpenRouterError as error:
+            msg = str(error)
+            err_type = "timeout" if "timeout" in msg.lower() else ("connection_error" if any(w in msg.lower() for w in ("connection", "network", "502", "503")) else "provider_error")
+            with self.lock:
+                self.case["error_type"] = err_type
+                self.case["can_resume"] = self.resume_count < 5
+            self._finish("incomplete", msg)
         except (ValueError, KeyError, TypeError):
             self._finish("incomplete", "Invalid controller response or evidence validation failure. No unchecked finding was published.")
         except Exception:
             self._finish("incomplete", "Investigation stopped after an internal error. Review server diagnostics and retry.")
         finally:
             with self.lock:
-                self.case["elapsed_seconds"] = round(time.monotonic() - started, 3)
+                self.case["elapsed_seconds"] = round(self.case.get("elapsed_seconds", 0) + time.monotonic() - started, 3)
+
+    def prepare_resume(self, mode: str, seconds: float | None = None, max_steps: int | None = None):
+        """User-requested recovery only; retain validated findings, aliases and tool results."""
+        with self.lock:
+            if self.case["status"] != "incomplete" or self.resume_count >= 5:
+                raise ValueError("Only incomplete investigations can resume, up to five times per case.")
+            if mode == "ai":
+                if settings()["model"] != self.model:
+                    raise ValueError("The model changed. Start a new investigation to use the new model.")
+                retry_at = self.case.get("retry_at")
+                if retry_at and time.time() < retry_at:
+                    raise ValueError(f"The provider requested a cooldown. Try resuming in {max(1, int(retry_at-time.time())+1)} seconds, or finish offline.")
+            elif mode != "offline":
+                raise ValueError("Unknown review mode")
+            self.resume_count += 1
+            self.mode = mode
+            self.case["mode"] = mode
+            if seconds:
+                self.seconds = float(seconds)
+            if max_steps:
+                self.max_steps = max(self.max_steps, len(self.seen) + max_steps)
+            self.case["recovery"] = ("AI review resumed with more time" if mode == "ai" and seconds
+                                     else ("AI review resumed" if mode == "ai"
+                                           else "User selected offline completion after partial review"))
+            self.case["can_resume"] = False
+            self.case.pop("error_type", None)
+            self.case.pop("retry_at", None)
+            self.case["status"] = "queued"
+            self.case["completion_reason"] = self.case["recovery"]
+            self.cancelled.clear()
+            for lead in self.case["leads"]:
+                if lead["state"] == "deferred":
+                    lead.update(state="investigating" if self.completed_tools.get(lead["id"]) else "pending", reason="Resuming remaining review.")
+            self.actions.clear()
+            self.resume_pending = True
+            self.event("case", "resume_review", {"mode": mode, "attempt": self.resume_count, "evidence": [], "reason": self.case["recovery"], "seconds": self.seconds})
 
     def _finish(self, status: str, reason: str):
         with self.lock:

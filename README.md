@@ -1,5 +1,18 @@
 # The Forensic Auditor
 
+**Student-materials support:** the Overview now includes the official eight-table SQLite estate workflow, all five scheme enums with narrow corroborated predicates, judge JSON, standalone diagram-rich HTML, masked/original evidence views, saved-case Q&A, and completed-run replay. See [official estate setup and limits](docs/official_estates.md). The existing ZIP/CSV workspace remains available. Original judge JSON must be exported with local identity reveal; masked aliases do not resolve against the original estate.
+
+Quick official-format verification:
+
+```powershell
+.\.venv\Scripts\python.exe -m tools.official_generate --seed 101 --estate tmp\estate.db --answer-key tmp\evaluator-only\answer-key.json
+.\.venv\Scripts\python.exe -m forensic_auditor.official run tmp\estate.db --seed 101 --company-rfc EMP920101AB1 --output tmp\judge-case
+.\.venv\Scripts\python.exe specs\student-materials\forensic-auditor\validate_format.py --submission tmp\judge-case.json --estate tmp\estate.db
+.\.venv\Scripts\python.exe -m tools.official_evaluate --output tmp\official-evaluation
+```
+
+The official SQLite path requires Python 3.11+ with SQLite deserialization support. Five supported scheme names do not imply universal detection: unknown accounting semantics, missing ownership and unrecognized contract prose remain explicit gaps. Live AI scheduling and provider cost capture are implemented with masked context and safe failure, but authenticated live latency/billing and the timed human demo still need verification.
+
 HackMTY 2026 Infosys forensic investigation project. See [AGENTS.md](AGENTS.md) for project rules and [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the roadmap.
 
 Working local MVP: **bare React + TypeScript + Vite** frontend and **FastAPI + Pydantic + NetworkX** backend. Includes ZIP/CSV ingestion, exact reconciliation, four versioned accounting rules, independent bank-flow discovery, fictional multi-scheme injections, source provenance, audit timeline, masked API views/exports, local source reveal, and grounded case Q&A.

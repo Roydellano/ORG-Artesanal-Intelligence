@@ -6,6 +6,7 @@ import {
   Check,
   ChevronRight,
   CircleHelp,
+  Clock,
   Database,
   FileCheck2,
   Fingerprint,
@@ -14,6 +15,7 @@ import {
   LayoutDashboard,
   LoaderCircle,
   Play,
+  RotateCw,
   Search,
   Send,
   ShieldCheck,
@@ -41,6 +43,9 @@ type Case = {
   timeline: Json[];
   limitations: string[];
   completion_reason?: string;
+  error_type?: string;
+  can_resume?: boolean;
+  recovery?: string;
   elapsed_seconds: number;
   model_calls: number;
   totals_by_category?: Record<string, Record<string, number>>;
@@ -348,6 +353,13 @@ export default function App() {
       setView("Investigation");
     });
   }
+  async function resumeInvestigation(nextMode: string, seconds = 90) {
+    await perform(async () => {
+      setCase(await post(`${base}/investigate`, { mode: nextMode, resume: true, seconds }));
+      setMode(nextMode);
+      setView("Investigation");
+    });
+  }
   async function showEvidence(ref: string, reveal = false) {
     opener.current = document.activeElement as HTMLElement;
     const id = dataset?.session_id;
@@ -523,9 +535,40 @@ export default function App() {
           )}
           {caseFile?.status === "incomplete" && (
             <div className="warning-banner">
-              Investigation incomplete. {caseFile.completion_reason} Published
-              findings passed validation, but coverage is unfinished.
+              <div>
+                <strong>Investigation incomplete.</strong> {caseFile.completion_reason}{" "}
+                Published findings passed validation, but coverage is unfinished.
+              </div>
+              {caseFile.can_resume && (
+                <div className="banner-actions">
+                  <button
+                    className="primary"
+                    disabled={busy || running}
+                    onClick={() => resumeInvestigation("ai", 120)}
+                    title="Grant 120 seconds to continue AI investigation"
+                  >
+                    <Clock size={14} /> Continue with more time (+120s)
+                  </button>
+                  <button
+                    disabled={busy || running}
+                    onClick={() => resumeInvestigation("ai", 90)}
+                    title="Retry connection and continue AI review"
+                  >
+                    <RotateCw size={14} /> {caseFile.error_type === "connection_error" ? "Retry connection" : "Continue AI review"}
+                  </button>
+                  <button
+                    disabled={busy || running}
+                    onClick={() => resumeInvestigation("offline")}
+                    title="Finish remaining leads deterministically without network calls"
+                  >
+                    <ShieldCheck size={14} /> Finish remaining review offline
+                  </button>
+                </div>
+              )}
             </div>
+          )}
+          {caseFile?.recovery && caseFile.status !== "incomplete" && (
+            <p className="mode-note">{caseFile.recovery}. Prior validated findings and tool results were preserved.</p>
           )}
           {caseFile?.status === "cancelled" && (
             <div className="warning-banner">
@@ -821,7 +864,7 @@ export default function App() {
                       {caseFile.timeline.length} tool events ·{" "}
                       {caseFile.model_calls} model calls
                     </span>
-                    {running && (
+                    {running ? (
                       <button
                         className="secondary"
                         onClick={() =>
@@ -833,7 +876,32 @@ export default function App() {
                       >
                         <Square size={13} /> Cancel
                       </button>
-                    )}
+                    ) : caseFile.status === "incomplete" && caseFile.can_resume ? (
+                      <div className="banner-actions" style={{ marginLeft: "auto" }}>
+                        <button
+                          className="primary"
+                          disabled={busy || running}
+                          onClick={() => resumeInvestigation("ai", 120)}
+                          title="Grant 120 seconds to continue AI investigation"
+                        >
+                          <Clock size={13} /> Continue (+120s)
+                        </button>
+                        <button
+                          disabled={busy || running}
+                          onClick={() => resumeInvestigation("ai", 90)}
+                          title="Retry connection and continue AI review"
+                        >
+                          <RotateCw size={13} /> {caseFile.error_type === "connection_error" ? "Retry" : "Continue AI"}
+                        </button>
+                        <button
+                          disabled={busy || running}
+                          onClick={() => resumeInvestigation("offline")}
+                          title="Finish remaining review offline"
+                        >
+                          <ShieldCheck size={13} /> Finish offline
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="investigation-grid">
                     <section className="panel">
