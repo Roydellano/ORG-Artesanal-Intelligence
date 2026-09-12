@@ -6,3 +6,10 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 tmp/
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+*.sqlite
+demo.zip
+case-file.json
+case-file.html

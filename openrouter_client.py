@@ -16,7 +16,7 @@ class OpenRouterError(RuntimeError):
     """Safe error for callers; excludes credentials and provider response bodies."""
 
 
-def chat(messages: list[dict[str, str]], *, max_tokens: int = 1024) -> str:
+def chat(messages: list[dict[str, str]], *, max_tokens: int = 1024, timeout: float = 60) -> str:
     """Load server config and make one bounded, non-streaming API request.
 
     Environment variables take precedence over the repository's .env file.
@@ -27,10 +27,10 @@ def chat(messages: list[dict[str, str]], *, max_tokens: int = 1024) -> str:
         **os.environ,
     }
     api_key = (config.get("OPENROUTER_API_KEY") or "").strip()
-    model = (config.get("OPENROUTER_MODEL") or "").strip()
-    if not api_key or not model:
-        raise OpenRouterError("Set OPENROUTER_API_KEY and OPENROUTER_MODEL in .env.")
-    if not messages or max_tokens <= 0:
+    model = (config.get("OPENROUTER_MODEL") or "deepseek/deepseek-v4.1-flash").strip()
+    if not api_key:
+        raise OpenRouterError("Set OPENROUTER_API_KEY in .env.")
+    if not messages or max_tokens <= 0 or not 0 < timeout <= 60:
         raise ValueError("Provide messages and a positive max_tokens limit.")
 
     request = Request(
@@ -48,7 +48,7 @@ def chat(messages: list[dict[str, str]], *, max_tokens: int = 1024) -> str:
         method="POST",
     )
     try:
-        with urlopen(request, timeout=60) as response:
+        with urlopen(request, timeout=timeout) as response:
             payload = json.load(response)
     except HTTPError as error:
         status = error.code

@@ -4,7 +4,20 @@
 
 Build the HackMTY 2026 Infosys "Forensic Auditor": an agent that investigates unfamiliar company records, follows money across entities, produces evidence-backed findings with MXN amounts, explains discarded leads, and answers a judge's follow-up question.
 
-Source: `HackMTY_2026_Infosys_Challenge_Forensic.md`, converted from the supplied one-page PDF extract, printed page 3 of 5. An OpenRouter text client and offline tests are implemented; the application milestones below remain planned. This plan assumes a local hackathon prototype; team size, hardware, and event duration are not specified. Milestones are ordered by dependency rather than promising an unverified deadline.
+Source: `HackMTY_2026_Infosys_Challenge_Forensic.md`, converted from the supplied one-page PDF extract, printed page 3 of 5. A local MVP is implemented; the status below distinguishes it from the broader milestones. This plan assumes a local hackathon prototype; team size, hardware, and event duration are not specified. Milestones are ordered by dependency rather than promising an unverified deadline.
+
+## Current delivery and agreed changes
+
+- **User-selected frontend:** bare React + TypeScript + Vite replaces Streamlit. FastAPI exposes the Python tools and serves the built bundle. No hosting/deployment is introduced.
+- **Implemented:** strict ZIP/CSV contracts, exact centavos, SHA-256/row provenance, fictional seeded generation and separate injection CLI, excess-settlement rule with refund/credit/allocation alternatives and independent source-byte revalidation, source inspector, transfer graph, timeline, lead dispositions, JSON and escaped printable HTML exports.
+- **Controller:** OpenRouter chooses typed actions from a fixed registry. Reconciliation and alternative checks are mandatory before a deterministic conclusion. Budgets, timeout, repeat detection, cancellation, dataset/model/prompt/context caching and incomplete states are implemented. Zero retries is the MVP retry cap. Offline mode uses the same tools/gate but is separately labeled.
+- **Finding scope:** corroborated excess settlement only. Supporting-record disputes, SAT entries and observed cycles remain leads. Broader fictitious-service, fabricated-sale and kickback predicates remain unfinished.
+- **Data subset:** gross invoice total/credit, invoice-obligation subledger, explicit allocations, ownership assertions for the uploaded period, optional support/SAT rows. Full CFDI, dated ownership intervals, raw credit notes and general-ledger importing are deferred. See `docs/input_contract.md`.
+- **Storage:** capped in-memory active sessions. CLI optionally archives provenance to SQLite; durable normalized records, resumable cases and persistent audit events remain planned.
+- **Q&A:** extraction of current-case totals, calculations, findings and dispositions with validated citations. Unsupported topics abstain; open-ended model-generated answers are deferred.
+- **Evaluation:** domain/API tests plus 20 reserved synthetic datasets over ten seeds, including clean controls. Evaluation covers the implemented rule offline. Live model availability/latency and the full unseen-scheme challenge rehearsal remain separate release dependencies.
+
+The sections below retain the full challenge roadmap. Their "Done when" statements are targets, not claims that every milestone is delivered.
 
 ## MVP scope and design decisions
 
@@ -14,7 +27,7 @@ Source: `HackMTY_2026_Infosys_Challenge_Forensic.md`, converted from the supplie
 - Defer model training, Kaggle anomaly baselines, production deployment, authentication, OCR, and comprehensive tax compliance. They do not need to block the challenge demo.
 - Use a single investigation controller with typed tools. The model proposes the next investigative step and writes explanations; deterministic code validates evidence and computes amounts.
 
-Proposed stack: Python, Pydantic schemas, SQLite for normalized records and audit events, NetworkX for bounded graph traversal, Streamlit for the local dashboard, pytest for domain tests, and OpenRouter with the user-selected DeepSeek V4.1 Flash model. Load OPENROUTER_API_KEY and OPENROUTER_MODEL from a Git-ignored server-side .env file; default model ID: deepseek/deepseek-v4.1-flash. Validate responses locally and benchmark latency and tool selection before the demo. These are implementation choices, not requirements in the PDF.
+Proposed stack: Python, Pydantic schemas, SQLite for normalized records and audit events, NetworkX for bounded graph traversal, bare React/TypeScript/Vite with FastAPI for the local dashboard, pytest for domain tests, and OpenRouter with the user-selected DeepSeek V4.1 Flash model. Load OPENROUTER_API_KEY and OPENROUTER_MODEL from a Git-ignored server-side .env file; default model ID: deepseek/deepseek-v4.1-flash. Validate responses locally and benchmark latency and tool selection before the demo. These are implementation choices, not requirements in the PDF.
 
 Flow: upload -> validate and normalize -> generate leads -> investigate and challenge hypotheses -> validate findings -> render case file and answer questions.
 
@@ -166,3 +179,4 @@ Implement the first vertical slice in this order: seeded duplicate-payment datas
 - [OpenRouter quickstart](https://openrouter.ai/docs/quickstart) documents the chat-completions endpoint and bearer authentication. [DeepSeek V4.1 Flash](https://openrouter.ai/deepseek/deepseek-v4.1-flash) is the user-selected model. Local schema and evidence validation remain required.
 
 Before implementing the XML adapter, retrieve the official CFDI 4.0 schema and define the supported document subset explicitly. The user-selected OpenRouter integration requires an API key, available credit, and network access. The key must stay server-side and out of version control. The original challenge brief is preserved unchanged.
+
