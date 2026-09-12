@@ -7,7 +7,7 @@ This file applies throughout this repository. Read it before making changes.
 - [HackMTY challenge brief](HackMTY_2026_Infosys_Challenge_Forensic.md) is the source of truth for challenge requirements. It is the user's Markdown conversion of the supplied PDF extract.
 - [Implementation plan](IMPLEMENTATION_PLAN.md) contains the proposed architecture, milestones, data contracts, and acceptance criteria. Read the relevant sections before implementation.
 - This file translates the brief into working guidance. Distinguish challenge requirements from proposed implementation choices. If the plan conflicts with the brief, preserve the challenge requirements and update the plan.
-- Inspect the actual repository before assuming a feature exists. At the time this guidance was created, the repository contained the brief and plan, with no application code or configured build/test commands.
+- Inspect the actual repository before assuming a feature exists. The repository now includes an OpenRouter text client and offline tests; the web app and investigation loop remain planned. See README.md for actual setup and test commands.
 
 ## What we are building
 
@@ -65,11 +65,11 @@ Implement a bounded investigation loop: form a hypothesis, choose a tool, inspec
 The following choices come from the implementation plan, not mandatory challenge tooling. Use them as the starting point and document justified changes in the plan:
 
 - Python with Pydantic contracts, SQLite storage, NetworkX graph traversal, Streamlit UI, and pytest domain tests.
-- A single investigation controller with a local Ollama model and structured responses. Benchmark model suitability on the demo hardware before selecting it.
+- A single investigation controller using OpenRouter with DeepSeek V4.1 Flash, as explicitly selected by the user. Read OPENROUTER_API_KEY and OPENROUTER_MODEL from server-side .env configuration; default model ID: deepseek/deepseek-v4.1-flash. Keep .env ignored by Git and keys out of browser code, logs, and exports. Validate structured investigation responses locally; benchmark remote latency and tool behavior before the demo.
 - CSV ingestion first; CFDI 4.0 XML ingestion after the initial end-to-end flow works.
 - Source-linked interactive case files and JSON/printable HTML exports. A dedicated PDF export is optional; the source document does not require the output to be a PDF.
 
-Resources named in the brief: SAT Article 69-B/EFOS data, official CFDI 4.0 schemas, IBM AMLSim for synthetic money flows, and public datasets such as IEEE-CIS for optional anomaly baselines. Verify official formats and preserve source attribution when integrating them. The brief recommends local inference with caching because investigations require many model calls; do not make the demo depend solely on a free hosted API quota.
+Resources named in the brief: SAT Article 69-B/EFOS data, official CFDI 4.0 schemas, IBM AMLSim for synthetic money flows, and public datasets such as IEEE-CIS for optional anomaly baselines. Verify official formats and preserve source attribution when integrating them. The brief suggests local inference, but the user has chosen the external OpenRouter API. Preserve caching and bounded call budgets; plan for network access, API credit, rate limits, and explicit incomplete-investigation handling during outages.
 
 Implement in this order:
 

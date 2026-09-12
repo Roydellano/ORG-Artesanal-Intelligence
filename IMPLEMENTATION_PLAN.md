@@ -4,7 +4,7 @@
 
 Build the HackMTY 2026 Infosys "Forensic Auditor": an agent that investigates unfamiliar company records, follows money across entities, produces evidence-backed findings with MXN amounts, explains discarded leads, and answers a judge's follow-up question.
 
-Source: `HackMTY_2026_Infosys_Challenge_Forensic.pdf`, supplied one-page extract, printed page 3 of 5. The repository contains no application code. This plan assumes a local hackathon prototype; team size, hardware, and event duration are not specified. Milestones are ordered by dependency rather than promising an unverified deadline.
+Source: `HackMTY_2026_Infosys_Challenge_Forensic.md`, converted from the supplied one-page PDF extract, printed page 3 of 5. An OpenRouter text client and offline tests are implemented; the application milestones below remain planned. This plan assumes a local hackathon prototype; team size, hardware, and event duration are not specified. Milestones are ordered by dependency rather than promising an unverified deadline.
 
 ## MVP scope and design decisions
 
@@ -14,7 +14,7 @@ Source: `HackMTY_2026_Infosys_Challenge_Forensic.pdf`, supplied one-page extract
 - Defer model training, Kaggle anomaly baselines, production deployment, authentication, OCR, and comprehensive tax compliance. They do not need to block the challenge demo.
 - Use a single investigation controller with typed tools. The model proposes the next investigative step and writes explanations; deterministic code validates evidence and computes amounts.
 
-Proposed stack: Python, Pydantic schemas, SQLite for normalized records and audit events, NetworkX for bounded graph traversal, Streamlit for the local dashboard, pytest for domain tests, and a local Ollama model with structured output. Select the model after a latency and tool-selection benchmark on the demo laptop. These are implementation choices, not requirements in the PDF.
+Proposed stack: Python, Pydantic schemas, SQLite for normalized records and audit events, NetworkX for bounded graph traversal, Streamlit for the local dashboard, pytest for domain tests, and OpenRouter with the user-selected DeepSeek V4.1 Flash model. Load OPENROUTER_API_KEY and OPENROUTER_MODEL from a Git-ignored server-side .env file; default model ID: deepseek/deepseek-v4.1-flash. Validate responses locally and benchmark latency and tool selection before the demo. These are implementation choices, not requirements in the PDF.
 
 Flow: upload -> validate and normalize -> generate leads -> investigate and challenge hypotheses -> validate findings -> render case file and answer questions.
 
@@ -72,7 +72,7 @@ Controller loop:
 5. Submit proposed findings to the evidence validator.
 6. Continue until lead exhaustion or the configurable step/time budget.
 
-Use local Ollama structured responses validated by Pydantic. Add capped retries, repeated-call detection, timeouts, and cancellation. Cache using the dataset hash, model/version, prompt version, and tool arguments so fresh uploads cannot reuse stale evidence. A model outage must yield an explicitly incomplete investigation; detector output must not masquerade as a finished AI investigation.
+Use OpenRouter responses validated locally by Pydantic. The selected model advertises JSON output without JSON-schema enforcement; do not assume provider-side schema validation. Add tool calling and structured-response handling to the initial text client when implementing this loop. Add capped retries, repeated-call detection, timeouts, and cancellation. Cache using the dataset hash, model/version, prompt version, and tool arguments so fresh uploads cannot reuse stale evidence. A model outage must yield an explicitly incomplete investigation; detector output must not masquerade as a finished AI investigation.
 
 Treat invoice descriptions and uploaded text as untrusted data, never executable instructions. Expose concise investigative decisions and tool results in the timeline rather than private model reasoning.
 
@@ -127,7 +127,7 @@ Three-minute rehearsal:
 - 1:40-2:25: show the supported case, deduplicated MXN total, and one rejected lead.
 - 2:25-3:00: answer an unexpected question with cited records.
 
-Provide the input schema and an independent injection script so judges can change the scheme without code changes. Warm the local model, cache the attributed SAT snapshot, and run the rehearsal without network access. Use a CLI path as a backup for UI problems, executing the same fresh-data investigation.
+Provide the input schema and an independent injection script so judges can change the scheme without code changes. Cache the attributed SAT snapshot, verify network access and OpenRouter credit, and rehearse using the configured external model. Test network failures separately and report an incomplete investigation when live inference is unavailable. Use a CLI path as a backup for UI problems, executing the same fresh-data investigation.
 
 ## Suggested repository layout
 
@@ -163,6 +163,6 @@ Implement the first vertical slice in this order: seeded duplicate-payment datas
 
 - SAT's [Article 69-B consultation](https://wwwmat.sat.gob.mx/cs/Satellite?c=ConsultaInfo&childpagename=SatTyR%2FConsultaInfo%2FSAT_LandingConsultaInformacion&cid=1462228576674&packedargs=d%3DTouch&pagename=TySWrapper) provides access to the full list and describes published statuses. Preserve the source snapshot and status distinctions in the adapter.
 - [IBM AMLSim](https://github.com/IBM/AMLSim/) generates synthetic banking transactions with known laundering patterns. Use it as an optional scenario source after the small company generator works; invoice/ledger integration still requires an adapter.
-- [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs) supports schema-constrained local responses. Schema conformance does not replace evidence validation.
+- [OpenRouter quickstart](https://openrouter.ai/docs/quickstart) documents the chat-completions endpoint and bearer authentication. [DeepSeek V4.1 Flash](https://openrouter.ai/deepseek/deepseek-v4.1-flash) is the user-selected model. Local schema and evidence validation remain required.
 
-Before implementing the XML adapter, retrieve the official CFDI 4.0 schema and define the supported document subset explicitly. No external credentials or paid services are required by the proposed MVP.
+Before implementing the XML adapter, retrieve the official CFDI 4.0 schema and define the supported document subset explicitly. The user-selected OpenRouter integration requires an API key, available credit, and network access. The key must stay server-side and out of version control. The original challenge brief is preserved unchanged.
