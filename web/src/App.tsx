@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { money } from "./money";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -70,10 +71,6 @@ const toolNames: Record<string, string> = {
 };
 const active = (c: Case | null) =>
   c && ["queued", "running"].includes(c.status);
-function money(value: number | string, currency = "MXN") {
-  const cents = BigInt(value);
-  return `${currency} $${(cents / 100n).toLocaleString("en-US")}.${(cents % 100n).toString().padStart(2, "0")}`;
-}
 async function request(path: string, options?: RequestInit) {
   const response = await fetch(`/api${path}`, options);
   const body = await response.json().catch(() => ({}));
@@ -1002,7 +999,7 @@ export default function App() {
                         <span>Allocated payments</span>
                         <b>
                           {money(
-                            finding.calculation.payments_centavos,
+                            finding.calculation?.payments_centavos,
                             finding.currency,
                           )}
                         </b>
@@ -1012,7 +1009,7 @@ export default function App() {
                         <span>Refunds</span>
                         <b>
                           {money(
-                            finding.calculation.refunds_centavos,
+                            finding.calculation?.refunds_centavos,
                             finding.currency,
                           )}
                         </b>
@@ -1022,7 +1019,7 @@ export default function App() {
                         <span>Recorded obligation</span>
                         <b>
                           {money(
-                            finding.calculation.obligation_centavos,
+                            finding.calculation?.obligation_centavos,
                             finding.currency,
                           )}
                         </b>
@@ -1034,7 +1031,7 @@ export default function App() {
                           {money(finding.amount_centavos, finding.currency)}
                         </b>
                       </div>
-                    </div> : <div className="calculation"><p>{finding.calculation.calculation}</p><b>{money(finding.amount_centavos, finding.currency)}</b></div>}
+                    </div> : <div className="calculation"><p>{finding.calculation?.calculation || "Calculation unavailable."}</p><b>{money(finding.amount_centavos, finding.currency)}</b></div>}
                     <details>
                       <summary>Alternative explanations checked</summary>
                       <ul>

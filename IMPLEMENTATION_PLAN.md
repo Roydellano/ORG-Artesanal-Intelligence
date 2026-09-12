@@ -242,6 +242,8 @@ Distinguish invoiced amount, paid amount, returned funds, estimated exposure, an
 
 ## 5. Deliver the investigation interface and case file
 
+Case-file rendering formats only available integer-centavo amounts; missing or invalid values display as unavailable, never zero. Frontend regression checks run with `npm --prefix web test`. Rebuild with `npm --prefix web run build` after frontend changes so the API serves the current rule-specific calculation views.
+
 Build four views:
 
 1. **Dataset:** file upload, validation results, coverage, SAT snapshot date, and start/cancel controls.
