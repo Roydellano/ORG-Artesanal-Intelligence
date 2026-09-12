@@ -15,8 +15,19 @@ from .data import load_zip
 from .demo import generate
 from .investigation import Investigation, answer
 from .reporting import export_case, printable
+from .privacy import Presentation
+from openrouter_client import public_settings, chat, OpenRouterError
 
 app = FastAPI(title="The Forensic Auditor", version="0.1.0")
+
+
+@app.middleware("http")
+async def no_record_cache(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="auditor")
 sessions = OrderedDict()
 guard = threading.RLock()
@@ -29,11 +40,12 @@ class StrictRequest(BaseModel):
 class DemoRequest(StrictRequest):
     seed: int = Field(default=2026, ge=0, le=2**31 - 1)
     clean: bool = False
+    scenario: Literal["legacy", "all", "excess", "service", "return", "sale", "cycle"] = "all"
 
 
 class StartRequest(StrictRequest):
     mode: Literal["offline", "ai"] = "offline"
-    max_steps: int = Field(default=36, ge=1, le=60)
+    max_steps: int = Field(default=60, ge=1, le=120)
     seconds: int = Field(default=90, ge=5, le=120)
 
 
@@ -48,7 +60,7 @@ def get_session(session_id: str):
         return sessions[session_id]
 
 
-def register(content: bytes):
+def register(content: bytes, *, synthetic=False):
     try:
         data = load_zip(content)
     except ValueError as error:
@@ -60,10 +72,11 @@ def register(content: bytes):
                 raise HTTPException(429, "All local dataset slots are busy.")
             del sessions[old]
         session_id = uuid4().hex
-        sessions[session_id] = {"data": data, "job": None}
+        presentation = Presentation(data)
+        sessions[session_id] = {"data": data, "job": None, "synthetic": synthetic, "presentation": presentation}
     return {"session_id": session_id, "dataset_id": data.identity,
             "coverage": {name: len(rows) for name, rows in data.tables.items()},
-            "warnings": data.warnings, "files": list(data.files)}
+            "warnings": presentation.apply(data.warnings), "files": list(data.files), "synthetic": synthetic}
 
 
 @app.get("/api/health")
@@ -71,15 +84,32 @@ def health():
     return {"status": "ok", "version": "0.1.0"}
 
 
+@app.get("/api/config")
+def config():
+    return public_settings()
+
+
+@app.post("/api/check-model")
+def check_model():
+    try:
+        # Fixed, non-sensitive diagnostic; never includes uploaded records.
+        chat([{"role": "user", "content": 'Return only JSON: {"ok":true}'}], synthetic=True)
+        return {"ok": True, **public_settings()}
+    except OpenRouterError as error:
+        raise HTTPException(502, str(error)) from None
+
+
 @app.post("/api/datasets/demo")
 def demo(body: DemoRequest):
-    content, _ = generate(body.seed, body.clean)
-    return register(content)
+    from .scenarios import generate_scenario
+    content, _ = generate(body.seed, body.clean) if body.scenario == "legacy" else generate_scenario(body.seed, body.scenario, body.clean)
+    return register(content, synthetic=True)
 
 
 @app.get("/api/demo.zip")
-def demo_download(seed: int = 2026, clean: bool = False):
-    content, _ = generate(seed, clean)
+def demo_download(seed: int = 2026, clean: bool = False, scenario: Literal["legacy", "all", "excess", "service", "return", "sale", "cycle"] = "all"):
+    from .scenarios import generate_scenario
+    content, _ = generate(seed, clean) if scenario == "legacy" else generate_scenario(seed, scenario, clean)
     return Response(content, media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="company-records.zip"'})
 
 
@@ -97,24 +127,56 @@ async def upload(file: UploadFile):
 @app.post("/api/datasets/{session_id}/investigate")
 def start(session_id: str, body: StartRequest):
     session = get_session(session_id)
+    if body.mode == "ai":
+        settings = public_settings()
+        if not settings["configured"]:
+            raise HTTPException(409, settings.get("error", "Set OPENROUTER_API_KEY in the server .env before starting AI mode."))
+        if settings.get("synthetic_only") and not session["synthetic"]:
+            raise HTTPException(409, "This free model is restricted to app-generated fictional demos. Uploaded records require offline review or no-collection/ZDR model routing.")
     with guard:
         if session["job"] and session["job"].snapshot()["status"] in ("queued", "running"):
             raise HTTPException(409, "An investigation is already running.")
         active = sum(item["job"] is not None and item["job"].snapshot()["status"] in ("queued", "running") for item in sessions.values())
         if active >= 2:
             raise HTTPException(429, "Two investigations are already active. Wait or cancel one.")
-        job = Investigation(session["data"], body.mode, body.max_steps, body.seconds)
+        job = Investigation(session["data"], body.mode, body.max_steps, body.seconds, synthetic=session["synthetic"])
         session["job"] = job
-        pool.submit(job.run)
-    return job.snapshot()
+        def execute():
+            try:
+                job.run()
+            finally:
+                with guard:
+                    if session.get("deleting"):
+                        job.cache.clear()
+                        job.projection.clear()
+                        sessions.pop(session_id, None)
+        pool.submit(execute)
+    return session["presentation"].apply(job.snapshot())
 
 
 @app.get("/api/datasets/{session_id}/case")
-def case_file(session_id: str):
+def case_file(session_id: str, full: bool = False):
     session = get_session(session_id)
     if not session["job"]:
         raise HTTPException(409, "Start an investigation first.")
-    return session["job"].snapshot()
+    result = session["job"].snapshot()
+    return result if full else session["presentation"].apply(result)
+
+
+@app.delete("/api/datasets/{session_id}")
+def delete_dataset(session_id: str):
+    session = get_session(session_id)
+    with guard:
+        job = session["job"]
+        if job and job.snapshot()["status"] in ("queued", "running"):
+            session["deleting"] = True
+            job.cancelled.set()
+            return {"status": "deleting", "message": "Cancellation requested; data will be released after the in-flight request ends."}
+        if job:
+            job.cache.clear()
+            job.projection.clear()
+        sessions.pop(session_id, None)
+    return {"status": "deleted"}
 
 
 @app.post("/api/datasets/{session_id}/cancel")
@@ -122,43 +184,53 @@ def cancel(session_id: str):
     session = get_session(session_id)
     if session["job"]:
         session["job"].cancelled.set()
-    return {"message": "Cancellation requested; any in-flight API call has a maximum 25-second timeout."}
+    return {"message": "Cancellation requested; an in-flight request ends within its configured timeout (at most 60 seconds)."}
 
 
 @app.get("/api/datasets/{session_id}/records/{table}")
 def records(session_id: str, table: str, offset: int = 0):
-    data = get_session(session_id)["data"]
+    session = get_session(session_id)
+    data = session["data"]
     if table not in data.tables or offset < 0:
         raise HTTPException(404, "Unknown table or invalid offset.")
     values = list(data.tables[table].values())
-    return {"total": len(values), "rows": [{**row.model_dump(mode="json"), "evidence_id": f"{table}:{row.id}"} for row in values[offset:offset + 100]]}
+    return session["presentation"].apply({"total": len(values), "rows": [{**row.model_dump(mode="json"), "evidence_id": f"{table}:{row.id}"} for row in values[offset:offset + 100]]})
 
 
 @app.get("/api/datasets/{session_id}/evidence")
-def evidence(session_id: str, ref: str):
-    data = get_session(session_id)["data"]
+def evidence(session_id: str, ref: str, reveal: bool = False):
+    session = get_session(session_id)
+    data = session["data"]
+    ref = session["presentation"].reverse.get(ref, ref)
+    if ref not in data.evidence and ":" in ref:
+        table, record_alias = ref.split(":", 1)
+        ref = f"{table}:{session['presentation'].reverse.get(record_alias, record_alias)}"
     if ref not in data.evidence:
         raise HTTPException(404, "Evidence reference does not exist in this dataset.")
-    return data.evidence[ref]
+    return data.evidence[ref] if reveal else session["presentation"].apply(data.evidence[ref])
 
 
 @app.post("/api/datasets/{session_id}/ask")
 def ask(session_id: str, body: QuestionRequest):
     session = get_session(session_id)
-    case = case_file(session_id)
-    result = answer(case, body.question)
+    case = case_file(session_id, full=True)
+    session["presentation"].prepare(case)
+    question = body.question
+    for alias, original in session["presentation"].reverse.items():
+        question = question.replace(alias, original)
+    result = answer(case, question)
     session["data"].retrieve(result["evidence"])
     session["job"].event("case", "answer_question", {"question": body.question, **result})
-    return result
+    return session["presentation"].apply(result)
 
 
 @app.get("/api/datasets/{session_id}/export/{kind}")
-def export(session_id: str, kind: Literal["json", "html"]):
+def export(session_id: str, kind: Literal["json", "html"], full: bool = False):
     session = get_session(session_id)
-    case = case_file(session_id)
+    case = case_file(session_id, full=True)
     if kind == "html":
-        return HTMLResponse(printable(session["data"], case), headers={"Content-Disposition": 'attachment; filename="case-file.html"'})
-    return export_case(session["data"], case)
+        return HTMLResponse(printable(session["data"], case, full=full, presentation=session["presentation"]), headers={"Content-Disposition": 'attachment; filename="case-file.html"'})
+    return export_case(session["data"], case, full=full, presentation=session["presentation"])
 
 
 DIST = Path(__file__).resolve().parents[1] / "web" / "dist"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import time
 import networkx as nx
 
 from .data import Dataset, pesos
@@ -153,9 +154,12 @@ def trace_funds(data: Dataset, invoice_id: str, *, depth: int = 4, max_edges: in
             "limits": {"depth": depth, "days": 30, "edges": max_edges, "examined_edges": examined}}
 
 
-def generate_leads(data: Dataset) -> list[dict]:
+def generate_leads(data: Dataset, *, deadline=None, cancelled=None, max_candidates=128) -> list[dict]:
     leads = []
+    priority = {}
     for invoice in data.tables["invoices"].values():
+        if (deadline and time.monotonic() >= deadline) or (cancelled and cancelled.is_set()):
+            break
         result = reconcile(data, invoice.id)
         supplier = lookup_supplier(data, invoice.id)
         support = check_support(data, invoice.id)
@@ -169,10 +173,13 @@ def generate_leads(data: Dataset) -> list[dict]:
         if supplier["sat_history"]:
             reasons.append("Review dated SAT history without inferring fraud.")
         if reasons:
+            priority[invoice.id] = result["excess_centavos"]
             leads.append({"id": invoice.id, "supplier_id": invoice.supplier_id, "state": "pending",
                           "hypothesis": " ".join(reasons), "reason": "Awaiting investigation.",
                           "evidence": [f"invoices:{invoice.id}"]})
-    return sorted(leads, key=lambda lead: (-reconcile(data, lead["id"])["excess_centavos"], lead["id"]))
+            if len(leads) >= max_candidates:
+                break
+    return sorted(leads, key=lambda lead: (-priority[lead["id"]], lead["id"]))
 
 
 def validate_finding(data: Dataset, candidate: dict) -> dict:

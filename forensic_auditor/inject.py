@@ -60,8 +60,14 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--truth", type=Path, required=True, help="Evaluator-only file, never upload it")
+    parser.add_argument("--scheme", choices=["excess", "service", "return", "sale", "cycle", "all"], default="excess")
+    parser.add_argument("--benign", action="store_true")
     args = parser.parse_args()
-    content, truth = inject(args.dataset.read_bytes(), args.seed)
+    if args.scheme == "excess" and not args.benign:
+        content, truth = inject(args.dataset.read_bytes(), args.seed)
+    else:
+        from .scenarios import inject_scenario
+        content, truth = inject_scenario(args.dataset.read_bytes(), args.seed, args.scheme, args.benign)
     args.output.write_bytes(content)
     args.truth.write_text(json.dumps(truth, indent=2), encoding="utf-8")
     print(f"Wrote {args.output}; truth saved separately.")

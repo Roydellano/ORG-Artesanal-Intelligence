@@ -223,7 +223,7 @@ def test_valid_ai_tools_and_dataset_scoping():
         calls.append(context["dataset_id"])
         lead = context["leads"][0]["id"]
         used = context["completed_tools"].get(lead, [])
-        tool = next(tool for tool in ("reconcile", "test_alternative", "conclude") if tool not in used)
+        tool = context["leads"][0]["available_tools"][0]
         return json.dumps({"lead_id": lead, "tool": tool})
     for seed in (1881, 2772):
         data, truth = demo(seed)
@@ -239,7 +239,7 @@ def test_uploaded_instruction_injection_is_only_data_and_html_escaped():
     data = edit(data, "invoices", lambda rows: rows[0].update(description=attack))
     case = run(data)
     assert case["totals"]["MXN"] == truth["expected_excess_centavos"]
-    rendered = printable(data, case)
+    rendered = printable(data, case, full=True)
     assert "<script>" not in rendered
     assert "&lt;script&gt;" in rendered
     assert "cannot substantiate" in answer(case, "What is the owner's home address?")["answer"]

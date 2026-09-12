@@ -1,5 +1,138 @@
 # Forensic Auditor implementation plan
 
+## Implementation status — September 12, 2026
+
+The updated execution plan below has been implemented in the existing package: typed model privacy projection; masked views and both exports with explicit local original access; dataset deletion; independent bounded flow discovery; v2 contracts/ownership/attestations/sales records; service-payment, prohibited-benefit and revenue-recognition predicates; per-category deduplicated amounts; audit exports; expanded extractive Q&A; multi-scheme fictional injection; and a versioned public-API holdout evaluator. The user changed the selected model to `nvidia/nemotron-3-ultra-550b-a55b:free`; `.env` still takes precedence through server configuration.
+
+The free endpoint's published trial notice is incompatible with confidential/personal data. A documented implementation decision restricts free models to server-generated fictional demos; uploaded data uses offline review or no-collection/ZDR routing. No unsafe fallback, paid model substitution, or account privacy-setting change is performed. Token limits are configurable (2048 default), reasoning is disabled by default, and the UI includes sanitized effective configuration and a fixed-prompt connection check.
+
+Validation: the restored legacy suite passed before the domain extensions; the expanded suite and frontend build pass. The 60-dataset offline API holdout completed with exact category totals and valid citations, with zero unsupported findings on its declared benign controls. Browser checks cover multi-scheme investigation, masked evidence and local reveal. These are synthetic acceptance results, not production fraud accuracy. See `docs/verification.md` for the final recorded check counts and limitations.
+
+Remaining external verification: this checkout has no `.env` or API key, so the user's original authenticated Nemotron error and live completion/latency/cost cannot be reproduced here. The model client handles the identified compatibility failure modes, but no live success is claimed. Free-tier availability and a complete timed AI rehearsal remain unverified. Arbitrary counterfactual Q&A, source authenticity checks and broader accounting semantics remain outside the implemented narrow predicates; incomplete/unsupported evidence results in abstention.
+
+The historical sections below are retained as design history. This status and the current input/model documentation govern claims about shipped behavior.
+
+## Updated execution plan — September 12, 2026
+
+This section is the prioritized plan for the existing implementation. It supersedes the ordering and conflicting implementation proposals in the original roadmap below. It is a plan, not a statement that the changes have shipped.
+
+Requirements come from the original [challenge brief](HackMTY_2026_Infosys_Challenge_Forensic.md) and the user's September 12 event/Q&A update: explain findings through the data trail, avoid false accusations, handle injected synthetic fraud, and secure/mask sensitive financial identifiers before external inference. The update permits synthetic/open datasets and describes free AI model options; it does not clearly establish a mandatory zero-cost rule. Preserve the selected OpenRouter integration, verify eligibility and costs before rehearsal, and do not silently change models. Preserve the original brief unchanged.
+
+Interpret the requested "chain of thought" as a reproducible audit explanation: hypothesis, tool action, source evidence, checked alternatives, rule outcome, amount calculation, and disposition. Do not request, store, or present private model reasoning as evidence.
+
+### Baseline and scope
+
+Code review found a working architectural slice for excess settlement, source provenance, bounded investigation, upload, case views, exports, and extractive Q&A. It also found unmasked tool results in outbound model context, no enforced provider data-use policy, invoice-only lead generation, and no publishable rule for fictitious services, kickbacks, or fabricated sales. Circular transfers can be traced after another lead triggers investigation, but do not independently generate leads.
+
+The review could not execute verification: the documented `.venv` and frontend dependencies were absent, `npm` was unavailable on PATH, and available Python runtimes lacked required packages. Existing tests and evaluation code are coverage assets, not fresh passing results.
+
+Keep FastAPI/Pydantic, React/TypeScript/Vite, NetworkX, exact centavos, CSV ingestion, and the deterministic evidence gate. Work in the actual `forensic_auditor/`, `web/src/`, and `tests/` directories; a broad repository reorganization is unnecessary. No model training, production deployment, OCR, or general tax engine is part of this increment.
+
+| Requirement | Current gap | Delivery gate |
+| --- | --- | --- |
+| Explainability | Limited Q&A; printable HTML omits full timeline | Phase 4: linked audit explanation in UI and both exports |
+| No false accusations | Strong gate for one rule only | Phase 3/5: rule-specific alternatives, evidence-removal tests, benign controls |
+| Injected schemes | Excess-payment injector; one generator family | Phase 5: independent fixtures, multiple schemes, same upload interface |
+| PII security | Raw identifiers and tool fields can leave server | Phase 1: allowlisted model projection and verified transport tests |
+| Provider data use | No enforced routing/privacy contract | Phase 1: verified eligible routing, no unsafe fallback |
+| Multi-transaction investigation | No independent flow leads; narrow rule coverage | Phase 2/3: bank-rooted leads and corroborated scheme predicates |
+| Model/data resources | Synthetic generation exists; live eligibility/cost unverified | Phase 0/5: documented model configuration and measured live rehearsal |
+
+### Phase 0 — Establish a reproducible baseline
+
+**Touchpoints:** `requirements.txt`, frontend dependency lockfile, `README.md`, existing tests and evaluator.
+
+1. Prepare the documented Python environment and frontend dependencies. Run the existing test suite, holdout evaluator, and frontend build; record actual commands, tool versions, failures, and runtime.
+2. Preserve the existing offline fixture results as a regression baseline. Verify fresh upload-to-export behavior before changing contracts.
+3. Record the configured model ID without credentials. Verify current provider API fields, data-use/retention terms, model availability, and event cost eligibility from official sources during implementation. Treat these as unresolved dependencies until checked.
+
+**Done when:** setup is reproducible, baseline failures are resolved or explicitly tracked, and the implementation has a documented external-inference eligibility check. Do not send customer records during baseline verification.
+
+### Phase 1 — Protect data before any external model call
+
+**Touchpoints:** new `forensic_auditor/privacy.py`, `investigation.py`, `openrouter_client.py`, `api.py`, `reporting.py`, `web/src/App.tsx`, new privacy/transport tests.
+
+1. Separate the local source store from a typed model-facing projection. Keep original bytes, RFC matching, account ownership joins, and evidence validation local. Outbound messages may contain only allowlisted facts needed for tool selection.
+2. Allocate opaque, collision-checked aliases per dataset session for entities, accounts, invoices, transactions, leads, and evidence. Do not derive aliases using plain hashes of low-entropy identifiers or use last-four digits as join keys. Keep the reversible mapping in memory on the server; reject unknown or cross-session aliases in model responses.
+3. Omit names, RFCs/SSNs, account numbers, original identifiers, filenames/URLs, descriptions, payment references, and unrestricted notes from external context. Replace useful text with local structured predicates and cited aliases. Apply the same policy to initial leads, every tool result, errors, cached context, and future Q&A calls. Use a final outbound validation gate that blocks unexpected fields before network I/O; regex redaction is supplemental, not the main boundary.
+4. Retain amounts, currencies, relative timing, and relationship facts only where needed. Document the residual sensitivity of transaction patterns; pseudonymization is not a promise of anonymity.
+5. Enforce verified provider restrictions for training/data collection and retention, including routing/fallback behavior. Record policy version and verification date. If eligible routing cannot be established, block external AI mode with an actionable reason; keep separately labeled offline review available. Do not invent provider API flags or assume transport encryption establishes no-training guarantees.
+6. Mask identifiers in default UI views and shareable exports. Provide an explicit local source-inspection action and a clearly marked full-evidence export for reviewers; never pass that full export into model context. Keep technical privacy diagnostics in a sanitized server audit record. Add dataset deletion that clears records, jobs after safe cancellation, mappings, and caches; document separately created export/archive retention.
+7. Preserve the loopback-only prototype boundary. Authentication and deployment hardening become prerequisites if network access is introduced; do not describe this phase as production security certification.
+
+**Acceptance checks:** capture complete outbound HTTP request bodies with mocked transport after every tool type, and assert seeded PII canaries never appear. Include identifiers embedded in IDs, notes, references, URLs, Unicode text, exception paths, and Q&A submitted during a running investigation. Test alias consistency, collisions, session isolation, cache clearing, unsupported provider policy, and no automatic unsafe fallback. Verify local original evidence and exact amounts remain intact. Test default masked JSON/HTML exports as well as explicit full-evidence exports.
+
+### Phase 2 — Discover schemes beyond invoice-triggered leads
+
+**Touchpoints:** `data.py`, `engine.py`, `investigation.py`, `docs/input_contract.md`, graph/timeline consumers in `web/src/App.tsx`.
+
+1. Introduce a typed lead contract with an independent lead ID, lead type, subject record references, hypothesis code, evidence references, missing facts, priority, state, and disposition. Migrate tools away from assuming every lead ID is an invoice ID. Version case/lead contracts and update API/UI consumers together.
+2. Add bank-rooted, time-ordered cycle and pass-through lead generation independently of overpayment, SAT matches, and delivery disputes. Include unallocated bank movements as investigative candidates without guessing invoice attribution or account ownership.
+3. Bound the entire discovery pass as well as individual traces by examined edges, depth, elapsed time, and candidate count. Start with existing trace limits (four hops, 30 days, 100 output edges, 1,000 examined edges per trace), add a dataset-wide work budget, and report truncated discovery explicitly. Check cancellation during discovery.
+4. Rank and deduplicate related leads without discarding source references. Retain grouped paths for inspection; do not label a cycle as kickback proof or assume successive transfers contain the same pesos.
+5. Add versioned input extensions only for the next rule's evidence needs. Preserve v1 uploads; reject ambiguous/unknown versions clearly. Ownership intervals, contracts/obligations, approval records, and service corroboration must identify their source and relevant dates. Missing new records must cause a narrower conclusion or abstention.
+
+**Acceptance checks:** an otherwise balanced invoice estate containing an independent bank cycle produces a lead; a bank-only cycle with missing ownership remains inconclusive. Harmless treasury transfers and refunds do not become fraud findings. Test changed IDs, reordered rows, disconnected components, high-degree graphs, bounded execution, cancellation, and explicit discovery truncation.
+
+### Phase 3 — Add evidence-backed scheme rules one at a time
+
+**Touchpoints:** `engine.py` or focused rule modules, `data.py`, `investigation.py`, generator/injector, domain tests.
+
+For each rule, define the required records, precise predicate, contradictory facts, benign alternatives, evidence set, amount type, and accounting formula before implementation. Recompute from original source bytes at publication. A model-selected action or narrative cannot substitute for a missing predicate.
+
+| Order / rule | Required corroboration and alternatives | Permitted conclusion and amount |
+| --- | --- | --- |
+| 1. Preserve excess settlement | Existing invoice, obligation ledger, allocations, owners; credits, refunds, cancellation, unallocated amounts | Existing excess-settlement exposure; never automatically intent or loss |
+| 2. Payment contrary to service terms | Contract ties payment to delivery; invoice and bank settlement; independently sourced records establish non-delivery for the relevant period; check advances, milestones, disputes, credits, and refunds | Payment inconsistent with documented service terms; eligible net paid exposure, not all supplier spend or automatic proof of a fictitious company |
+| 3. Corroborated prohibited return of funds | Observed ordered bank legs, dated recipient ownership/relationship, source-linked rule prohibiting the payment or benefit, and documented transaction linkage; exclude refunds, loans, reimbursements, authorized distributions, internal transfers | Verified prohibited payment/return under supplied terms; report observed return separately from initial outflow and exposure; do not infer tracing through commingled funds |
+| 4. Unsupported recorded sale | Versioned customer/sales/receivable records, recorded recognition, applicable supplied recognition condition and independently sourced contradiction; check credit sales, timing, returns, credits, and cancellations | Revenue recorded contrary to documented conditions; reversible overstatement amount, separate from cash loss; unpaid invoices alone are insufficient |
+
+The sales rule needs a separate receivables contract; do not reinterpret the current supplier-obligation subledger as sales evidence. Each rule remains unavailable for substantiation until its contracts and controls pass. Distinguish independent source evidence from repeated assertions copied across files; source hashes do not establish authenticity.
+
+Add case-level accounting for overlapping findings. Track claimed portions of source allocations, preserve separate amount categories and currencies, and avoid summing the same exposure twice across rules. If overlap cannot be resolved, show separate non-additive amounts instead of an invented grand total.
+
+**Acceptance checks for every new rule:** positive fixture, benign lookalike, missing required evidence, contradictory evidence, uncertain/expired ownership, forged reference, amount tampering, partial refund, and overlap with another rule. Removing essential evidence must downgrade/reject publication. Findings state the supported discrepancy and visibility limits; use fraud/scheme language only to the extent supported by the implemented predicate.
+
+### Phase 4 — Make the investigation defensible on screen and in exports
+
+**Touchpoints:** `investigation.py`, `reporting.py`, `api.py`, `web/src/App.tsx`.
+
+1. Store structured audit events: lead/hypothesis, action, supporting/contradicting evidence, alternative tested, outcome, rule version, missing facts, and disposition. Generate concise explanations from validated facts/templates. Any optional model paraphrase must remain limited to validated claims and citations.
+2. Define required tool checks per lead/rule type. Replace the universal invoice-reconciliation prerequisite for bank/sales leads with appropriate prerequisites. Preserve schema validation, repeated-call detection, bounded calls, cancellation, and incomplete outcomes.
+3. Show a clear path from scheme summary to related transactions, exact calculation, tested alternatives, and source rows. Make graph truncation and missing external legs visible. Include the full audit timeline and calculation context in both JSON and printable HTML, respecting the privacy modes from Phase 1.
+4. Extend Q&A to selected findings/entities: why flagged, why another lead was dismissed, how an amount was calculated, which records support a relationship, what remains unknown, and what evidence would change the conclusion. Prefer extractive responses and typed read-only retrieval. Counterfactual calculations are labeled hypothetical and never alter published findings. Any added model call uses Phase 1's boundary.
+5. Distinguish completed review of generated leads from complete fraud coverage. Show implemented rule coverage, unexamined/truncated regions, deferred leads, and incomplete investigation state.
+
+**Acceptance checks:** UI and exports agree on claims, totals, dispositions, and audit events; every citation resolves locally. An unfamiliar supported question retrieves the right finding and references, while unsupported intent/ownership questions abstain. Prompt injection through a model-facing field or question cannot create tools, disclosures, or unchecked findings. Rehearse the full interaction in the actual browser.
+
+### Phase 5 — Evaluate hidden injections and rehearse the challenge
+
+**Touchpoints:** `demo.py`, `inject.py`, `evaluate.py`, `tests/`, `docs/demo_runbook.md`, `README.md`.
+
+1. Extend independent injection to each implemented scheme and benign lookalike, using fictional entities only. Maintain evaluator truth outside uploaded records, model context, tool outputs, and exports. Do not leak scenario names or expected outcomes through metadata.
+2. Freeze a versioned holdout manifest before tuning. Include hand-authored fixtures that do not share the detector's reconciliation logic, multiple simultaneous schemes, cycles with no invoice anomaly, varied topology/dates/amounts, and missing or contradictory evidence. Fresh seeds from one generator alone do not establish generalization.
+3. Run all fixtures through the same public upload/investigation/export API. Separately run browser rehearsals and a declared live-model subset after privacy gates pass. Mocked controller tests do not count as live-model validation. Verify fresh dataset isolation without code changes or presenter access to expected answers.
+4. Report lead recall separately from substantiated-finding precision/recall, unsupported supplier accusations, expected abstentions, exact amount accuracy by category/currency, citation validity, completion rate, p50/p95/max runtime, model calls, and cost. Count incomplete cases and discovery truncation explicitly rather than excluding them.
+5. Rehearse: 0:00–0:20 upload an unseen compatible dataset; 0:20–1:40 investigate; 1:40–2:25 explain a supported finding and a rejected lead; 2:25–3:00 answer a judge-selected question. Declare the tested dataset size and machine. Target completion within 90 seconds; optimize measured bottlenecks while preserving validation. Outages remain incomplete AI investigations; offline review is an explicit separate mode.
+
+**Release gates (targets, not achieved results):**
+
+- Zero seeded PII canaries in outbound requests and default shareable artifacts; verified provider eligibility with safe failure behavior.
+- All published findings have valid citations, satisfied predicates, and exact reproducible amounts; zero unsupported accusations on the declared benign/ambiguous suite.
+- Every implemented scheme is detected and correctly disposed in its reserved acceptance fixtures. Publish holdout misses and metrics by scheme without implying production accuracy.
+- Fresh upload, evidence inspection, export, cancellation, outage handling, and surprise Q&A work through the demo interface.
+- Live completion/runtime/cost results are recorded on the declared demo workload; no claim of a successful rehearsal until executed.
+
+### Delivery order and scope control
+
+Implement as reviewable increments: baseline → privacy boundary → independent flow leads/contracts → service-payment rule → prohibited-return rule → sales rule → audit/Q&A completion → holdout and live rehearsal. Add tests and independent fixtures with each rule, not only at the end. Update README/input contracts when behavior ships; keep pending features marked planned.
+
+If time runs short, preserve privacy, evidence validation, independent flow discovery, at least one fully corroborated new scheme, and the fresh-data rehearsal. Keep unfinished scheme families explicitly unsupported. Defer visual polish, official SAT fetching, CFDI XML, optional local-model adapters, durable storage, and additional export formats first. Do not advertise full challenge coverage while required scheme families remain unimplemented.
+
+## Original roadmap and architectural context
+
+The following material preserves the earlier design context. Its milestone descriptions are targets; the updated execution plan above governs new work and corrects obsolete ordering or scope assumptions.
+
 ## Objective and current state
 
 Build the HackMTY 2026 Infosys "Forensic Auditor": an agent that investigates unfamiliar company records, follows money across entities, produces evidence-backed findings with MXN amounts, explains discarded leads, and answers a judge's follow-up question.

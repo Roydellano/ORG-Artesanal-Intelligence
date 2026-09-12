@@ -118,9 +118,89 @@ class Sat(Record):
         return value.strip().upper()
 
 
+class V2Record(Record):
+    version: Literal["2"]
+
+
+class Contract(V2Record):
+    invoice_id: Text
+    period_start: date
+    period_end: date
+    due_date: date
+    payment_condition: Literal["delivery", "advance", "milestone"]
+    source_id: Text
+
+
+class Attestation(V2Record):
+    subject_kind: Literal["invoice", "sale"]
+    subject_id: Text
+    period_start: date
+    period_end: date
+    as_of: date
+    status: Literal["delivered", "not_delivered", "unknown"]
+    issuer_id: Text
+    source_id: Text
+
+
+class Ownership(V2Record):
+    account_id: Text
+    entity_id: Text
+    valid_from: date
+    valid_to: date
+    source_id: Text
+
+
+class ReturnPolicy(V2Record):
+    root_transaction_id: Text
+    recipient_entity_id: Text
+    valid_from: date
+    valid_to: date
+    disposition: Literal["prohibited", "permitted", "unknown"]
+    purpose: Literal["benefit", "refund", "loan", "reimbursement", "distribution", "internal_transfer"]
+    source_id: Text
+
+
+class ReturnLink(V2Record):
+    root_transaction_id: Text
+    return_transaction_id: Text
+    path: Text  # JSON array of observed bank IDs; at most four, validated locally.
+    issuer_id: Text
+    source_id: Text
+
+
+class Customer(V2Record):
+    name: Text
+    rfc: Text
+
+
+class Sale(V2Record):
+    customer_id: Text
+    company_id: Text
+    date: date
+    period_start: date
+    period_end: date
+    currency: Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
+    total: Money
+    credit: Money
+    status: Literal["active", "cancelled"]
+    recognition_condition: Literal["delivery", "unconditional"]
+    source_id: Text
+
+
+class SaleLedger(V2Record):
+    sale_id: Text
+    date: date
+    currency: Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
+    debit: Money
+    credit: Money
+    source_id: Text
+
+
 SCHEMAS = {"suppliers": Supplier, "accounts": Account, "invoices": Invoice,
            "bank": Bank, "allocations": Allocation, "ledger": Ledger,
-           "support": Support, "sat": Sat}
+           "support": Support, "sat": Sat, "contracts": Contract, "attestations": Attestation,
+           "ownership": Ownership, "return_policies": ReturnPolicy, "return_links": ReturnLink,
+           "customers": Customer, "sales": Sale, "sale_ledger": SaleLedger}
 MONEY_FIELDS = {"total", "credit", "amount", "debit"}
 REQUIRED = {"suppliers", "accounts", "invoices", "bank", "allocations", "ledger"}
 
@@ -197,7 +277,7 @@ def load_files(files: dict[str, bytes]) -> Dataset:
                 evidence[ref] = {"id": ref, "file": filename, "sha256": hashes[filename],
                                  "csv_record": row_number, "line_end": reader.line_num,
                                  "original": raw, "normalized": row.model_dump(mode="json"),
-                                 "ingestion_version": "csv-v1"}
+                                 "ingestion_version": "csv-v2" if "version" in schema.model_fields else "csv-v1"}
         except (ValueError, UnicodeError, csv.Error) as exc:
             # Pydantic errors may echo uploaded text; show only a controlled location.
             if type(exc).__name__ == "ValidationError":
@@ -211,6 +291,36 @@ def load_files(files: dict[str, bytes]) -> Dataset:
 
 def validate_links(tables: dict) -> list[str]:
     warnings = []
+    for table, rows in tables.items():
+        for row in rows.values():
+            for start, end in (("valid_from", "valid_to"), ("period_start", "period_end")):
+                if hasattr(row, start) and getattr(row, start) > getattr(row, end):
+                    raise ValueError(f"{table}: invalid date interval")
+    for table, field, target in (("contracts", "invoice_id", "invoices"),
+                                 ("ownership", "account_id", "accounts"),
+                                 ("return_policies", "root_transaction_id", "bank"),
+                                 ("return_links", "root_transaction_id", "bank"),
+                                 ("return_links", "return_transaction_id", "bank"),
+                                 ("sales", "customer_id", "customers"),
+                                 ("sale_ledger", "sale_id", "sales")):
+        if any(getattr(row, field) not in tables[target] for row in tables[table].values()):
+            raise ValueError(f"{table}: missing linked record")
+    for row in tables["attestations"].values():
+        target = "invoices" if row.subject_kind == "invoice" else "sales"
+        if row.subject_id not in tables[target] or row.as_of < row.period_end:
+            raise ValueError("Attestation has a missing subject or invalid as-of date")
+    for row in tables["return_links"].values():
+        try:
+            path = json.loads(row.path)
+            if not isinstance(path, list) or not 2 <= len(path) <= 4 or any(not isinstance(v, str) or v not in tables["bank"] for v in path):
+                raise ValueError()
+            if len(set(path)) != len(path) or path[0] != row.root_transaction_id or path[-1] != row.return_transaction_id:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise ValueError("Return link requires a JSON array of 2–4 distinct existing bank IDs with matching endpoints") from None
+    for sale in tables["sales"].values():
+        if sale.credit > sale.total:
+            raise ValueError("Sale credit exceeds total")
     for invoice in tables["invoices"].values():
         if invoice.supplier_id not in tables["suppliers"] or invoice.credit > invoice.total:
             raise ValueError("Invoice supplier is missing or credit exceeds total")

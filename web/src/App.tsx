@@ -29,6 +29,7 @@ type Dataset = {
   coverage: Record<string, number>;
   warnings: string[];
   files: string[];
+  synthetic?: boolean;
 };
 type Case = {
   status: string;
@@ -41,6 +42,9 @@ type Case = {
   completion_reason?: string;
   elapsed_seconds: number;
   model_calls: number;
+  totals_by_category?: Record<string, Record<string, number>>;
+  total_definition?: string;
+  discovery?: Json;
 };
 type View =
   | "Overview"
@@ -238,6 +242,10 @@ export default function App() {
   const [mode, setMode] = useState("offline");
   const [seed, setSeed] = useState(2026);
   const [clean, setClean] = useState(false);
+  const [scenario, setScenario] = useState("all");
+  const [configuration, setConfiguration] = useState<Json>({});
+  const [modelStatus, setModelStatus] = useState("");
+  const [evidenceRef, setEvidenceRef] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [evidence, setEvidence] = useState<Json | null>(null);
@@ -252,6 +260,8 @@ export default function App() {
   const opener = useRef<HTMLElement | null>(null);
   const running = !!active(caseFile);
   const base = dataset ? `/datasets/${dataset.session_id}` : "";
+
+  useEffect(() => { request("/config").then(setConfiguration).catch(e => setError(e.message)); }, []);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -293,10 +303,7 @@ export default function App() {
     closeEvidence.current?.focus();
     const handle = (event: KeyboardEvent) => {
       if (event.key === "Escape") setEvidence(null);
-      if (event.key === "Tab") {
-        event.preventDefault();
-        closeEvidence.current?.focus();
-      }
+      // Keep native tab order so the explicit source reveal action is keyboard accessible.
     };
     window.addEventListener("keydown", handle);
     return () => {
@@ -327,7 +334,7 @@ export default function App() {
   }
   async function demo() {
     await perform(async () =>
-      load(await post("/datasets/demo", { seed, clean })),
+      load(await post("/datasets/demo", { seed, clean, scenario })),
     );
   }
   async function upload(file?: File) {
@@ -344,14 +351,14 @@ export default function App() {
       setView("Investigation");
     });
   }
-  async function showEvidence(ref: string) {
+  async function showEvidence(ref: string, reveal = false) {
     opener.current = document.activeElement as HTMLElement;
     const id = dataset?.session_id;
     try {
       const row = await request(
-        `${base}/evidence?ref=${encodeURIComponent(ref)}`,
+        `${base}/evidence?ref=${encodeURIComponent(ref)}&reveal=${reveal}`,
       );
-      if (id === sessionRef.current) setEvidence(row);
+      if (id === sessionRef.current) { setEvidence(row); setEvidenceRef(ref); }
     } catch (e) {
       setError((e as Error).message);
     }
@@ -709,9 +716,17 @@ export default function App() {
                   </div>
                   <p className="mode-note">
                     {mode === "ai"
-                      ? "Starting AI mode sends relevant record content to OpenRouter using your server-side configuration. Maximum 36 steps / 90 seconds."
+                      ? "AI receives pseudonymous lead summaries only. Up to 60 tool steps / 90 seconds. Free endpoints are available only for app-generated fictional demos."
                       : "Offline review is labeled separately from an AI investigation. Findings still require verified relationships and exact calculations."}
                   </p>
+                  <p className="mode-note">Model: {configuration.model || "Not configured"}. {configuration.configured ? "Server key configured." : "Server API key is missing."}</p>
+                  <button className="secondary" disabled={busy || running} onClick={() => perform(async () => {
+                    const result = await post("/check-model", {}); setConfiguration(result); setModelStatus("Connection successful. No accounting records were sent.");
+                  })}>Check model connection</button>
+                  {modelStatus && <p>{modelStatus}</p>}
+                  {dataset && <button className="secondary" disabled={busy} onClick={() => perform(async () => {
+                    await request(base, {method: "DELETE"}); sessionRef.current = null; setDataset(null); setCase(null); setEvidence(null); setAnswers([]); setRecords({rows: [], total: 0});
+                  })}>Delete dataset from memory</button>}
                   <div className="demo-row">
                     <span>Explore fictional records</span>
                     <div>
@@ -736,6 +751,9 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+                  <label>Fictional scenario <select value={scenario} onChange={e => setScenario(e.target.value)} disabled={running}>
+                    {["all", "excess", "service", "return", "sale", "cycle"].map(value => <option key={value} value={value}>{value}</option>)}
+                  </select></label>
                   <label className="clean-option">
                     <input
                       type="checkbox"
@@ -747,7 +765,7 @@ export default function App() {
                   </label>
                   <a
                     className="text-link"
-                    href={`/api/demo.zip?seed=${seed}&clean=${clean}`}
+                    href={`/api/demo.zip?seed=${seed}&clean=${clean}&scenario=${scenario}`}
                   >
                     Download these CSV records <ArrowDownToLine size={13} />
                   </a>
@@ -949,6 +967,12 @@ export default function App() {
                     </a>
                   </div>
                 </div>
+                <section className="panel"><h3>Separate amount categories</h3>
+                  <p>{caseFile.total_definition}</p>
+                  {Object.entries(caseFile.totals_by_category || {}).map(([category, values]) => <p key={category}><b>{category.replaceAll("_", " ")}</b>: {Object.entries(values).map(([currency, amount]) => money(amount, currency)).join(" · ")}</p>)}
+                  {caseFile.discovery?.truncated && <p>Discovery was truncated. This case does not cover all candidate paths.</p>}
+                  <details><summary>Local reviewer export with unmasked source records</summary><a className="secondary" href={`/api${base}/export/html?full=true`}>Full evidence HTML (contains sensitive data)</a></details>
+                </section>
                 <div className="section-title">
                   <h2>
                     Verified findings <span>{verified}</span>
@@ -973,7 +997,7 @@ export default function App() {
                       <Badge value="substantiated" />
                     </div>
                     <p>{finding.claim}</p>
-                    <div className="calculation">
+                    {finding.rule === "excess-settlement-v1" ? <div className="calculation">
                       <div>
                         <span>Allocated payments</span>
                         <b>
@@ -1010,7 +1034,7 @@ export default function App() {
                           {money(finding.amount_centavos, finding.currency)}
                         </b>
                       </div>
-                    </div>
+                    </div> : <div className="calculation"><p>{finding.calculation.calculation}</p><b>{money(finding.amount_centavos, finding.currency)}</b></div>}
                     <details>
                       <summary>Alternative explanations checked</summary>
                       <ul>
@@ -1278,7 +1302,7 @@ export default function App() {
           >
             <header>
               <div>
-                <span className="eyebrow">ORIGINAL SOURCE</span>
+                <span className="eyebrow">SOURCE RECORD · MASKED BY DEFAULT</span>
                 <h2 id="evidence-title">{evidence.id}</h2>
               </div>
               <button
@@ -1289,6 +1313,7 @@ export default function App() {
                 <X size={22} />
               </button>
             </header>
+            <button className="secondary" onClick={() => showEvidence(evidenceRef, true)}>Reveal original values locally</button>
             <div className="provenance">
               <span>
                 <b>File</b>

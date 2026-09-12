@@ -1,5 +1,7 @@
 # CSV input contract · v1
 
+Version 1 files remain valid. Optional v2 extensions are described below; each extension record requires `version=2`. Unknown columns/versions are rejected, not guessed. Neither a filename nor a record can declare an uploaded bundle trusted synthetic for free-model use.
+
 Upload one ZIP with UTF-8 CSV files at its root. Required: `suppliers.csv`, `accounts.csv`, `invoices.csv`, `bank.csv`, `allocations.csv`, `ledger.csv`. Optional: `support.csv`, `sat.csv`. Unknown files, nested paths, duplicate filenames/IDs, invalid records, broken allocation references, and overallocated payments reject the whole upload. An empty file must still contain its header.
 
 Limits: 20 MB compressed and uncompressed, 20,000 total records. Monetary fields are nonnegative decimal strings with at most two decimal places, no commas/exponents/symbols; maximum 1,000,000,000.00 per field. Bank and allocation amounts must be positive. IDs must be unique within their table. Text fields are bounded to 500 characters, descriptions/reference notes to 2,000. Uploaded text is data, never instructions.
@@ -41,3 +43,32 @@ The gate reloads original CSV bytes and checks the evidence set and arithmetic. 
 Provenance includes file SHA-256, original strings, normalized record, CSV record number (header is 1), ending physical line for multiline CSV, and ingestion/rule versions. A hash establishes identity of supplied bytes, not authenticity or completeness.
 
 Download the example from Overview, edit its CSVs and ZIP only the documented files. See `docs/demo_runbook.md` for independent injection. Keep evaluator truth outside the ZIP; the uploader rejects it.
+
+## Optional v2 evidence contracts
+
+Every table still uses the same source hash/CSV record/original value provenance. All columns shown are required when the table is supplied; an empty table has its header. Amounts remain decimal strings on input and integer centavos internally. Dates are ISO dates and intervals are inclusive. Source IDs and issuer IDs are supplied attribution, not certificates of authenticity.
+
+| File | Exact columns |
+| --- | --- |
+| contracts.csv | `id,version,invoice_id,period_start,period_end,due_date,payment_condition,source_id` |
+| attestations.csv | `id,version,subject_kind,subject_id,period_start,period_end,as_of,status,issuer_id,source_id` |
+| ownership.csv | `id,version,account_id,entity_id,valid_from,valid_to,source_id` |
+| return_policies.csv | `id,version,root_transaction_id,recipient_entity_id,valid_from,valid_to,disposition,purpose,source_id` |
+| return_links.csv | `id,version,root_transaction_id,return_transaction_id,path,issuer_id,source_id` |
+| customers.csv | `id,version,name,rfc` |
+| sales.csv | `id,version,customer_id,company_id,date,period_start,period_end,currency,total,credit,status,recognition_condition,source_id` |
+| sale_ledger.csv | `id,version,sale_id,date,currency,debit,credit,source_id` |
+
+- `contracts.payment_condition`: `delivery`, `advance`, `milestone`. Only a single unambiguous delivery-conditioned contract can substantiate `service-terms-v2`. Its due date cannot precede period end. Payments before the due date require resolution rather than a service finding.
+- `attestations.subject_kind`: `invoice`, `sale`. The subject must exist in the corresponding table. `status`: `delivered`, `not_delivered`, `unknown`. The period must exactly match the contract/sale, and `as_of` cannot precede period end. Corroboration needs at least two distinct issuers and source IDs, outside the transaction parties and contract/ledger sources, covering the payment/recognition date. A delivered assertion blocks the non-delivery predicate regardless of vote counts. Legacy delivered receipt assertions also block service publication until resolved.
+- `ownership`: every relevant transfer endpoint needs an applicable dated ownership assertion matching `accounts.entity_id`. Conflicting applicable assertions or missing coverage block new service/return findings. Legacy excess settlement retains v1 period-wide account semantics.
+- `return_policies.disposition`: `prohibited`, `permitted`, `unknown`. `purpose`: `benefit`, `refund`, `loan`, `reimbursement`, `distribution`, `internal_transfer`. The one applicable policy must identify the recipient entity and cover the full transfer period. Only an explicitly prohibited benefit is eligible; unknown or conflicting policies abstain. An explicit permission dismisses that policy hypothesis.
+- `return_links.path`: a CSV-quoted JSON array of 2–4 distinct existing bank IDs, e.g. `["T1","T2","T3"]`. The first/last IDs must match root/return fields. Two distinct attributed linkage records must agree on the one path. Every leg must connect, increase strictly in time, use one currency, and fall within 30 days of the root. The origin must be a company account and the recipient cannot be the same company or another company-kind account. A return already allocated to an invoice remains unresolved. Linkage must not repeat the policy source or come from origin/recipient entities.
+- `sales.recognition_condition`: `delivery`, `unconditional`. `status`: `active`, `cancelled`. Only active, delivery-conditioned records can substantiate the new revenue predicate. Cancellation requires additional reversal reconciliation. An unpaid sale alone is never proof.
+- `sale_ledger` is a **revenue subledger**, separate from v1 invoice obligations: `credit - debit` is net recognized revenue. It must equal `sales.total - sales.credit` in the same currency. Debits include supplied reversals; a full double-entry ledger is not accepted as this subledger.
+
+## Amount categories and limits
+
+`service-terms-v2` measures net allocated payments contrary to delivery terms after refunds. `prohibited-return-v2` measures the observed recipient transfer once and reports original outflow separately; it does not attribute the same pesos through commingled funds. `recognition-terms-v2` measures net revenue recorded contrary to the supplied conditions. These are separate non-additive categories. No general fraud, tax or loss amount is inferred. Source identity and consistency are validated; factual authenticity and completeness are not independently established.
+
+Independent bank discovery does not require an invoice anomaly. It also surfaces cycles and unallocated bank movements as inconclusive leads. Overall discovery limits are 128 candidates, 10,000 examined bank edges, and the case deadline. Traces are bounded to four hops, 30 days, 100 returned edges and 1,000 examined edges. Truncation makes the investigation incomplete.

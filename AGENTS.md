@@ -6,6 +6,7 @@ This file applies throughout this repository. Read it before making changes.
 
 - [HackMTY challenge brief](HackMTY_2026_Infosys_Challenge_Forensic.md) is the source of truth for challenge requirements. It is the user's Markdown conversion of the supplied PDF extract.
 - [Implementation plan](IMPLEMENTATION_PLAN.md) contains the proposed architecture, milestones, data contracts, and acceptance criteria. Read the relevant sections before implementation.
+- The user's September 12 event/Q&A update adds mandatory masking before external inference. The updated execution plan records that requirement; see `docs/privacy_and_models.md` for implemented controls and the free-model restriction.
 - This file translates the brief into working guidance. Distinguish challenge requirements from proposed implementation choices. If the plan conflicts with the brief, preserve the challenge requirements and update the plan.
 - Inspect the actual repository before assuming a feature exists. The repository now includes a bare React/Vite frontend, FastAPI backend, CSV ingestion, excess-settlement evidence gate, bounded OpenRouter controller, offline review, exports, and tests. Broader fraud-rule coverage remains planned. See README.md for actual setup and test commands.
 
@@ -65,7 +66,7 @@ Implement a bounded investigation loop: form a hypothesis, choose a tool, inspec
 The following choices come from the implementation plan, not mandatory challenge tooling. Use them as the starting point and document justified changes in the plan:
 
 - Python with Pydantic contracts, NetworkX graph traversal, FastAPI, bare React/TypeScript/Vite UI (explicitly selected by the user), and pytest domain tests. SQLite provenance archival is optional via CLI; resumable investigation storage remains planned.
-- A single investigation controller using OpenRouter with DeepSeek V4.1 Flash, as explicitly selected by the user. Read OPENROUTER_API_KEY and OPENROUTER_MODEL from server-side .env configuration; default model ID: deepseek/deepseek-v4.1-flash. Keep .env ignored by Git and keys out of browser code, logs, and exports. Validate structured investigation responses locally; benchmark remote latency and tool behavior before the demo.
+- A single investigation controller using OpenRouter. The user has switched to Nemotron 3 Ultra free; default model ID: `nvidia/nemotron-3-ultra-550b-a55b:free`. Read OPENROUTER_API_KEY and OPENROUTER_MODEL from server-side .env configuration. Keep .env ignored by Git and keys out of browser code, logs, and exports. Free endpoints are restricted to app-generated fictional records because the selected endpoint logs use for product improvement; uploaded records require offline review or no-collection/ZDR routing. All model context uses the typed privacy projection. Validate structured responses locally; live latency remains a separate verification requirement.
 - CSV ingestion first; CFDI 4.0 XML ingestion after the initial end-to-end flow works.
 - Source-linked interactive case files and JSON/printable HTML exports. A dedicated PDF export is optional; the source document does not require the output to be a PDF.
 

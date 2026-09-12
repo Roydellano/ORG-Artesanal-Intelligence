@@ -1,0 +1,8 @@
+{
+  "version": "extended-holdout-v1",
+  "frozen": "2026-09-12",
+  "seeds": [920003, 930011, 940019, 950027, 960031],
+  "scenarios": ["excess", "service", "return", "sale", "cycle", "all"],
+  "benign": [false, true],
+  "scope": "Synthetic contract fixtures; independent hand-authored domain fixtures are also run by pytest. Not production accuracy."
+}
