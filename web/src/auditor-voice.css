@@ -11,3 +11,5 @@
 .voice-transcript { max-height: 220px; overflow-y: auto; overflow-wrap: anywhere; margin: 10px 0; }
 .voice-transcript p { margin: 8px 0; }
 .auditor-voice details { margin-top: 12px; }
+.voice-input-level { margin-top: 12px; font-size: 12px; }
+.voice-input-level meter { width: 140px; margin-left: 8px; vertical-align: middle; }

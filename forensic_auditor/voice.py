@@ -2,7 +2,6 @@
 import os
 import re
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import httpx
 from dotenv import dotenv_values
@@ -40,13 +39,8 @@ def signed_session():
     agent = settings()['ELEVENLABS_AGENT_ID']
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', agent):
         raise VoiceError('Create the voice agent with: python -m tools.setup_voice')
-    result = request('GET', '/convai/conversation/get-signed-url', params={'agent_id': agent})
-    url = result.get('signed_url', '') if isinstance(result, dict) else ''
-    try:
-        parsed = urlsplit(url)
-        valid = parsed.scheme == 'wss' and parsed.hostname == 'api.elevenlabs.io' and not parsed.username
-    except (ValueError, TypeError):
-        valid = False
-    if not valid:
-        raise VoiceError('ElevenLabs returned an invalid voice connection URL.')
-    return {'signed_url': url, 'max_seconds': 180}
+    result = request('GET', '/convai/conversation/token', params={'agent_id': agent})
+    token = result.get('token') if isinstance(result, dict) else None
+    if not isinstance(token, str) or not token.strip() or len(token) > 16384:
+        raise VoiceError('ElevenLabs returned an invalid voice connection token.')
+    return {'conversation_token': token, 'max_seconds': 180}

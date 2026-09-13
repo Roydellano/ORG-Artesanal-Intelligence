@@ -13,7 +13,7 @@ export async function voiceRequest(base: string, path: '/voice/session' | '/voic
   }
   if (!response.ok) throw new Error(typeof result?.detail === 'string' ? result.detail : `Voice request failed (HTTP ${response.status}).`);
   if (!result || typeof result !== 'object') throw new Error('Voice API returned an invalid response.');
-  if (path === '/voice/session' && (typeof result.signed_url !== 'string' ||
+  if (path === '/voice/session' && (typeof result.conversation_token !== 'string' || !result.conversation_token.trim() ||
       !Number.isFinite(result.max_seconds) || result.max_seconds <= 0))
     throw new Error('Voice API returned an incomplete session. Check the backend version.');
   return result;

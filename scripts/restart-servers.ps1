@@ -13,7 +13,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Backend import failed. Check the Python setup in README.md.' }
 
     # Validate both listeners before stopping either service. Never kill all Python/Node processes.
-    $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+    $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop |
         Where-Object { $_.LocalPort -in @(8000, 5173) })
     $serverIds = @()
     foreach ($listener in $listeners) {
@@ -43,7 +43,7 @@ try {
     }
     $deadline = (Get-Date).AddSeconds(10)
     do {
-        $busy = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+        $busy = @(Get-NetTCPConnection -State Listen -ErrorAction Stop |
             Where-Object { $_.LocalPort -in @(8000, 5173) })
         if (!$busy.Count) { break }
         Start-Sleep -Milliseconds 250
@@ -65,6 +65,22 @@ try {
         try {
             $null = Invoke-WebRequest 'http://127.0.0.1:8000/api/health' -UseBasicParsing -TimeoutSec 2
             $null = Invoke-WebRequest 'http://127.0.0.1:5173' -UseBasicParsing -TimeoutSec 2
+            # HTTP readiness alone could belong to an older server after a bind failure.
+            $readyListeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop |
+                Where-Object { $_.LocalPort -in @(8000, 5173) })
+            foreach ($port in @(8000, 5173)) {
+                $launched = if ($port -eq 8000) { $backend } else { $frontend }
+                $owned = @($readyListeners | Where-Object {
+                    if ($_.LocalPort -ne $port) { return $false }
+                    $owner = Get-CimInstance Win32_Process -Filter "ProcessId = $($_.OwningProcess)" -ErrorAction Stop
+                    $owner -and ($owner.ProcessId -eq $launched.Id -or
+                        ($owner.ParentProcessId -eq $launched.Id -and $owner.CreationDate -ge $launched.StartTime))
+                })
+                if (!$owned.Count) { throw "Port $port is not owned by the newly launched server." }
+            }
+            $backend.Refresh()
+            $frontend.Refresh()
+            if ($backend.HasExited -or $frontend.HasExited) { throw 'A newly launched server exited.' }
             Write-Host 'Ready: http://127.0.0.1:5173'
             Write-Host 'API:   http://127.0.0.1:8000/docs'
             Write-Host "Logs:  $logDir"

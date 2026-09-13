@@ -12,7 +12,7 @@ test('voice session and case questions use the API prefix', async t => {
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
     calls.push([url, options]);
-    return Response.json({ signed_url: 'wss://api.elevenlabs.io/test', max_seconds: 180 });
+    return Response.json({ conversation_token: 'ephemeral-token', max_seconds: 180 });
   });
   const signal = new AbortController().signal;
   await voiceRequest('/datasets/demo', '/voice/session', signal);
@@ -31,5 +31,9 @@ test('empty responses and API errors have actionable messages', async t => {
   fetch.mock.mockImplementation(async () => Response.json({ detail: 'Dataset session expired' }, { status: 404 }));
   await assert.rejects(ask, /Dataset session expired/);
   fetch.mock.mockImplementation(async () => Response.json({}));
+  await assert.rejects(ask, /incomplete session/);
+  fetch.mock.mockImplementation(async () => Response.json({ signed_url: 'wss://api.elevenlabs.io/test', max_seconds: 180 }));
+  await assert.rejects(ask, /incomplete session/);
+  fetch.mock.mockImplementation(async () => Response.json({ conversation_token: ' ', max_seconds: 180 }));
   await assert.rejects(ask, /incomplete session/);
 });

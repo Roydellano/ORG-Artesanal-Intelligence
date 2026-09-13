@@ -9,19 +9,22 @@ from forensic_auditor import voice
 from tools.setup_voice import agent_config, TOOL
 
 
-def test_signing_keeps_key_server_side_and_validates_url():
+def test_signing_keeps_key_server_side_and_validates_token():
     config = {'ELEVENLABS_API_KEY': 'secret', 'ELEVENLABS_AGENT_ID': 'agent_demo'}
-    response = httpx.Response(200, json={'signed_url': 'wss://api.elevenlabs.io/v1/convai/conversation?token=short'},
+    response = httpx.Response(200, json={'token': 'ephemeral-conversation-token'},
                               request=httpx.Request('GET', 'https://api.elevenlabs.io'))
     with patch.object(voice, 'settings', return_value=config), patch.object(voice.httpx, 'request', return_value=response) as call:
         result = voice.signed_session()
         assert 'secret' not in str(result)
+        assert result == {'conversation_token': 'ephemeral-conversation-token', 'max_seconds': 180}
+        assert call.call_args.args[:2] == ('GET', voice.BASE + '/convai/conversation/token')
         assert call.call_args.kwargs['headers'] == {'xi-api-key': 'secret'}
         assert call.call_args.kwargs['params'] == {'agent_id': 'agent_demo'}
         assert call.call_args.kwargs['json'] is None
-    with patch.object(voice, 'settings', return_value=config), patch.object(voice, 'request', return_value={'signed_url': 'wss://evil.example'}):
-        with pytest.raises(voice.VoiceError):
-            voice.signed_session()
+    for invalid in ({}, {'token': ''}, {'token': ' '}, {'token': 42}, {'token': 'x' * 16385}):
+        with patch.object(voice, 'settings', return_value=config), patch.object(voice, 'request', return_value=invalid):
+            with pytest.raises(voice.VoiceError):
+                voice.signed_session()
 
 
 def test_voice_rejects_uploaded_records_before_provider_call():

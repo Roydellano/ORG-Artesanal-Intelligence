@@ -18,11 +18,15 @@ export default function AuditorVoice({ base, synthetic, onAnswer }: {
   const [deviceId, setDeviceId] = useState('');
   const [micStatus, setMicStatus] = useState('');
   const [testingMic, setTestingMic] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [inputLevel, setInputLevel] = useState(0);
+  const [switchingMic, setSwitchingMic] = useState(false);
   const [transcript, setTranscript] = useState<{ role: string; message: string }[]>([]);
   const conversation = useRef<Conversation | null>(null);
   const epoch = useRef(0);
   const active = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const meter = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const requests = useRef(new Set<AbortController>());
   const callback = useRef(onAnswer);
   callback.current = onAnswer;
@@ -31,6 +35,7 @@ export default function AuditorVoice({ base, synthetic, onAnswer }: {
     epoch.current++;
     active.current = false;
     clearTimeout(timer.current);
+    clearInterval(meter.current);
     requests.current.forEach(c => c.abort());
     requests.current.clear();
     const current = conversation.current;
@@ -38,6 +43,9 @@ export default function AuditorVoice({ base, synthetic, onAnswer }: {
     if (current) void current.endSession().catch(() => {});
     setStatus('disconnected');
     setChecking(false);
+    setMuted(false);
+    setInputLevel(0);
+    setSwitchingMic(false);
   }
   useEffect(() => () => { stop(); }, [base]);
   useEffect(() => {
@@ -62,6 +70,20 @@ export default function AuditorVoice({ base, synthetic, onAnswer }: {
       setMicStatus(`Ready: ${mic.label}`);
     } catch (e) { setMicStatus(''); setError(microphoneError(e)); }
     finally { setTestingMic(false); }
+  }
+
+  async function selectMicrophone(value: string) {
+    const current = conversation.current;
+    if (!current || current.type !== 'voice') { setDeviceId(value); setMicStatus(''); return; }
+    setSwitchingMic(true); setError('');
+    try {
+      await current.changeInputDevice({ inputDeviceId: value || 'default' });
+      if (conversation.current !== current) return;
+      setDeviceId(value);
+      setMicStatus('Microphone changed. Speak and check the input meter.');
+    } catch (e) {
+      if (conversation.current === current) setError(microphoneError(e));
+    } finally { if (conversation.current === current) setSwitchingMic(false); }
   }
 
   async function start() {
@@ -92,7 +114,7 @@ export default function AuditorVoice({ base, synthetic, onAnswer }: {
       const { Conversation } = await import('@elevenlabs/client');
       if (!current()) return;
       const connected = await Conversation.startSession({
-        signedUrl: session.signed_url, connectionType: 'websocket',
+        conversationToken: session.conversation_token, connectionType: 'webrtc',
         inputDeviceId: mic.deviceId || undefined,
         onConnect: () => { if (current()) setStatus('connected'); },
         onDisconnect: details => {
@@ -129,6 +151,11 @@ export default function AuditorVoice({ base, synthetic, onAnswer }: {
       });
       if (!current()) { await connected.endSession(); return; }
       conversation.current = connected;
+      connected.setMicMuted(false);
+      setMuted(false);
+      meter.current = setInterval(() => {
+        if (current()) setInputLevel(Math.max(0, Math.min(1, connected.getInputVolume())));
+      }, 100);
       clearTimeout(timer.current);
       timer.current = setTimeout(stop, Math.min(session.max_seconds, 180) * 1000);
     } catch (e) {
@@ -139,8 +166,8 @@ export default function AuditorVoice({ base, synthetic, onAnswer }: {
   const connected = status !== 'disconnected';
   return <section className="auditor-voice" aria-label="Real-time voice auditor">
     <div className="voice-controls">
-      <label>Microphone <select aria-label="Microphone" value={deviceId} disabled={connected || testingMic}
-        onChange={e => { setDeviceId(e.target.value); setMicStatus(''); }}>
+      <label>Microphone <select aria-label="Microphone" value={deviceId} disabled={status === 'connecting' || testingMic || switchingMic}
+        onChange={e => { void selectMicrophone(e.target.value); }}>
         <option value="">System default</option>
         {devices.filter(d => d.deviceId && d.deviceId !== 'default').map((d, i) =>
           <option key={d.deviceId} value={d.deviceId}>{d.label || `Microphone ${i + 1}`}</option>)}
@@ -154,9 +181,16 @@ export default function AuditorVoice({ base, synthetic, onAnswer }: {
         {connected ? 'End voice' : 'Start voice'}
       </button>
       <span role="status">{status === 'connecting' ? 'Connecting…' : connected
-        ? checking ? 'Reviewing case…' : mode === 'speaking' ? 'Auditor speaking — you can interrupt' : 'Listening…'
+        ? muted ? 'Microphone muted' : checking ? 'Reviewing case…' : mode === 'speaking' ? 'Auditor speaking — you can interrupt' : 'Your turn — speak now'
         : 'ElevenLabs · live voice'}</span>
+      {status === 'connected' && <button type="button" aria-pressed={muted} onClick={() => {
+        conversation.current?.setMicMuted(!muted); setMuted(!muted);
+      }}>{muted ? 'Unmute microphone' : 'Mute microphone'}</button>}
     </div>
+    {status === 'connected' && <div className="voice-input-level">
+      <label>Microphone input <meter min={0} max={1} value={muted ? 0 : inputLevel} aria-label="Microphone input level" /></label>
+      <p>Speak naturally, including while the auditor speaks. If the meter stays empty when you talk, select another microphone or check its hardware mute. Your recognized words appear below.</p>
+    </div>}
     <p>{synthetic ? 'Starting voice sends microphone audio to ElevenLabs. Use fictional case questions only. Sessions end after 3 minutes.'
       : 'Voice is available for app-generated fictional demos. Uploaded records remain in text chat.'}</p>
     {error && <p role="alert" className="voice-error">{error}</p>}
