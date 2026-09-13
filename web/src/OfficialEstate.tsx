@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import IntegrityPanel from './IntegrityPanel';
 import AuditorMarkdown from './AuditorMarkdown';
 
 type Json = Record<string, any>;
@@ -9,15 +10,15 @@ async function call(path: string, init?: RequestInit) {
   return body;
 }
 
-export default function OfficialEstate() {
-  const [seed, setSeed] = useState('2026');
-  const [company, setCompany] = useState('');
+export default function OfficialEstate({ initialSession }: { initialSession?: Json } = {}) {
+  const [seed, setSeed] = useState(String(initialSession?.seed ?? 2026));
+  const [company, setCompany] = useState(initialSession?.company_rfc ?? '');
   const [mode, setMode] = useState('offline');
   const [rate, setRate] = useState('');
   const [fxSource, setFxSource] = useState('');
-  const [sid, setSid] = useState('');
-  const [coverage, setCoverage] = useState<Json>({});
-  const [caseFile, setCase] = useState<Json>({});
+  const [sid, setSid] = useState(initialSession?.session_id ?? '');
+  const [coverage, setCoverage] = useState<Json>(initialSession?.coverage ?? {});
+  const [caseFile, setCase] = useState<Json>(initialSession ? { status: initialSession.status } : {});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [reveal, setReveal] = useState(false);
@@ -89,6 +90,7 @@ export default function OfficialEstate() {
         <label><input type="checkbox" checked={reveal} onChange={e => { generation.current++; setReveal(e.target.checked); setAnswer(null); setSource(null); }}/> Reveal original identities locally</label>
       </div>
       {complete && <>
+        <IntegrityPanel key={sid} kind="estates" identity={sid} running={running} />
         <p>{caseFile.findings.length} supported findings · {caseFile.leads_not_pursued.length} declined leads · {caseFile.run_metadata.llm_calls} model calls · MXN {caseFile.run_metadata.mxn_cost ?? 'unavailable'} cost · {caseFile.run_metadata.wall_clock_seconds}s</p>
         <div className="official-controls">
           <a href={url('html')} target="_blank" rel="noreferrer">Open standalone case file</a>

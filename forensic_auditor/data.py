@@ -224,17 +224,17 @@ class Dataset:
 
 
 def load_zip(content: bytes) -> Dataset:
-    """Never extract uploaded paths; reject unknown members and oversized archives."""
+    """Read documented root CSVs only; never extract paths or read other members."""
     if len(content) > 20_000_000:
         raise ValueError("Upload limit is 20 MB")
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
-            members = archive.infolist()
             allowed = {f"{name}.csv" for name in SCHEMAS}
+            members = [m for m in archive.infolist() if m.filename in allowed and not m.is_dir()]
             if len(members) > len(allowed) or len({m.filename for m in members}) != len(members):
                 raise ValueError("Duplicate or excessive ZIP members")
-            if any(m.filename not in allowed or m.flag_bits & 1 for m in members):
-                raise ValueError("ZIP must contain only the documented CSV filenames at its root")
+            if any(m.flag_bits & 1 for m in members):
+                raise ValueError("Documented CSV files must not be encrypted")
             if sum(m.file_size for m in members) > 20_000_000:
                 raise ValueError("Uncompressed dataset limit is 20 MB")
             return load_files({m.filename: archive.read(m) for m in members})

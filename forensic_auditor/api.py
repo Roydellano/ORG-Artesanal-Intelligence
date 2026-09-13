@@ -3,6 +3,8 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import threading
+import io
+import zipfile
 from typing import Literal
 from uuid import uuid4
 
@@ -24,6 +26,8 @@ from openrouter_client import public_settings, chat, OpenRouterError
 app = FastAPI(title="The Forensic Auditor", version="0.1.0")
 from .official.api import router as official_router
 app.include_router(official_router)
+from .integrity_api import router as integrity_router
+app.include_router(integrity_router)
 
 
 @app.middleware("http")
@@ -119,11 +123,24 @@ def demo_download(seed: int = 2026, clean: bool = False, scenario: Literal["lega
 
 
 @app.post("/api/datasets/upload")
-async def upload(file: UploadFile):
+async def upload(file: UploadFile, seed: int = Query(default=2026, ge=0, le=2**31 - 1)):
     try:
         content = await file.read(20_000_001)
         if len(content) > 20_000_000:
             raise HTTPException(413, "Upload limit is 20 MB")
+        official = content.startswith(b'SQLite format 3\x00')
+        if zipfile.is_zipfile(io.BytesIO(content)):
+            with zipfile.ZipFile(io.BytesIO(content)) as archive:
+                names = {Path(member.filename).name for member in archive.infolist() if not member.is_dir()}
+                official = {'vendors.csv', 'bank_txns.csv'} <= names
+        if official:
+            from .official.estate import load_any, infer_company
+            from .official.api import register as register_estate
+            try:
+                estate = load_any(content)
+                return {'kind': 'official', **register_estate(estate, seed, infer_company(estate))}
+            except ValueError as error:
+                raise HTTPException(422, str(error)) from None
         return register(content)
     finally:
         await file.close()

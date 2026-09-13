@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { money } from "./money";
 import AuditorMarkdown from "./AuditorMarkdown";
 import AuditorVoice from "./AuditorVoice";
+import OfficialEstate from "./OfficialEstate";
+import IntegrityPanel from "./IntegrityPanel";
+import InvestigationInsights from "./InvestigationInsights";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -105,14 +108,20 @@ function Badge({ value }: { value: string }) {
 function MoneyGraph({
   entries,
   onEvidence,
+  highlightedEvidence = [],
 }: {
   entries: Json[];
   onEvidence: (ref: string) => void;
+  highlightedEvidence?: string[];
 }) {
   const edges: Json[] = [
     ...new Map<string, Json>(
       entries
-        .flatMap((e) => e.result?.edges || [])
+        .filter((entry) => entry.tool === "trace_funds")
+        // Trace tools emit bank evidence in the same order as their edges.
+        // Use those references because masked record IDs and evidence aliases differ.
+        .flatMap((entry) => (entry.result?.edges || []).map((edge: Json, index: number) => ({ ...edge, evidenceRef: entry.result.evidence?.[index] })))
+        .filter((edge) => typeof edge.evidenceRef === "string")
         .map((e: Json): [string, Json] => [e.id, e]),
     ).values(),
   ].slice(0, 24);
@@ -175,13 +184,17 @@ function MoneyGraph({
             <g
               key={edge.id}
               className="graph-edge"
-              onClick={() => onEvidence(`bank:${edge.id}`)}
+              role="button"
+              tabIndex={0}
+              aria-label={`Inspect transfer ${edge.id}: ${money(edge.amount, edge.currency)}`}
+              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onEvidence(edge.evidenceRef); } }}
+              onClick={() => onEvidence(edge.evidenceRef)}
             >
               <path
                 d={`M${a.x},${a.y} Q${midX},${midY} ${b.x - (dx / length) * 18},${b.y - (dy / length) * 18}`}
                 fill="none"
-                stroke="#648777"
-                strokeWidth="2"
+                stroke={highlightedEvidence.includes(edge.evidenceRef) ? '#b96145' : '#648777'}
+                strokeWidth={highlightedEvidence.includes(edge.evidenceRef) ? 4 : 2}
                 markerEnd="url(#arrow)"
               />
               <text
@@ -225,7 +238,7 @@ function MoneyGraph({
         {edges.map((edge) => (
           <button
             key={edge.id}
-            onClick={() => onEvidence(`bank:${edge.id}`)}
+            onClick={() => onEvidence(edge.evidenceRef)}
             aria-label={`Inspect ${edge.id}: ${money(edge.amount, edge.currency)}`}
           >
             <span>{edge.id}</span>
@@ -235,7 +248,7 @@ function MoneyGraph({
         ))}
       </div>
       <p className="caption">
-        Select a transfer to inspect its source. First 24 observed edges; paths
+        Terracotta lines are cited by the selected finding. Select a transfer to inspect its source. First 24 observed edges; paths
         do not prove kickbacks or attribution of the same funds.
       </p>
     </>
@@ -245,7 +258,9 @@ function MoneyGraph({
 export default function App() {
   const [view, setView] = useState<View>("Overview");
   const [dataset, setDataset] = useState<Dataset | null>(null);
+  const [officialSession, setOfficialSession] = useState<Record<string, any> | null>(null);
   const [caseFile, setCase] = useState<Case | null>(null);
+  const [selectedFindingId, setSelectedFindingId] = useState('');
   const [mode, setMode] = useState("offline");
   const [seed, setSeed] = useState(2026);
   const [clean, setClean] = useState(false);
@@ -353,7 +368,13 @@ export default function App() {
     await perform(async () => {
       const form = new FormData();
       form.append("file", file);
-      load(await request("/datasets/upload", { method: "POST", body: form }));
+      const result = await request(`/datasets/upload?seed=${seed}`, { method: "POST", body: form });
+      if (result.kind === "official") {
+        setOfficialSession({ ...result, seed });
+        window.setTimeout(() => document.getElementById('official-upload-result')?.scrollIntoView({ behavior: 'smooth' }), 0);
+      } else {
+        load(result);
+      }
     });
   }
   async function investigate() {
@@ -842,6 +863,7 @@ export default function App() {
                   </a>
                 </section>
               </div>
+              {officialSession && <div id="official-upload-result"><OfficialEstate key={officialSession.session_id} initialSession={officialSession} /></div>}
               {dataset && dataset.warnings.length > 0 && (
                 <details className="coverage-notes">
                   <summary>Coverage notes · {dataset.warnings.length}</summary>
@@ -934,6 +956,13 @@ export default function App() {
                       </div>
                     ) : null}
                   </div>
+                  <InvestigationInsights
+                    leads={caseFile.leads}
+                    findings={caseFile.findings}
+                    selectedId={selectedFindingId}
+                    onSelect={setSelectedFindingId}
+                    onEvidence={showEvidence}
+                  />
                   <div className="investigation-grid">
                     <section className="panel">
                       <div className="panel-title">
@@ -943,6 +972,7 @@ export default function App() {
                       <MoneyGraph
                         entries={caseFile.timeline}
                         onEvidence={showEvidence}
+                        highlightedEvidence={(caseFile.findings.find(f => f.id === selectedFindingId) ?? caseFile.findings[0])?.evidence || []}
                       />
                     </section>
                     <section className="panel lead-panel">
@@ -1063,6 +1093,7 @@ export default function App() {
                     </a>
                   </div>
                 </div>
+                {dataset && <IntegrityPanel key={dataset.session_id} kind="datasets" identity={dataset.session_id} running={running} />}
                 <section className="panel category-panel"><h3>Separate amount categories</h3>
                   <p>{caseFile.total_definition}</p>
                   {Object.entries(caseFile.totals_by_category || {}).map(([category, values]) => <p key={category}><b>{category.replaceAll("_", " ")}</b>: {Object.entries(values).map(([currency, amount]) => money(amount, currency)).join(" · ")}</p>)}

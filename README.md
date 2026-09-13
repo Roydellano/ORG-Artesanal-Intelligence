@@ -1,156 +1,138 @@
 # The Forensic Auditor
 
-**Student-materials support:** the official workflow reads the judges' estate as `estate.db` **or** `estate_csv.zip`, infers the audited company when not given, and detects all five scheme types from the eight official tables alone (SAT 69-B list, exact CLABE ownership, dated bank paths, inferred approval tiers, CFDI status/payment method, collections). Every finding records the challenger arguments it survived and is `proven` or `probable`; every declined lead names its closer. Output: judge JSON, standalone diagram-rich HTML, masked/original views, saved-case Q&A, decision fingerprint and network-free replay. See [official estate workflow, predicates and limits](docs/official_estates.md) and [pitch facts](docs/pitch_facts.md).
+**Follow the money. Check the evidence. Explain the finding.**
 
-Quick official-format verification:
+The Forensic Auditor helps finance and audit teams investigate suspicious activity in a company's accounting records. It connects invoices, payments, suppliers and supporting records into a case file that explains what happened, which records support it, how the peso amount was calculated, and which suspicions were dismissed or remain unresolved.
 
-```powershell
-.\.venv\Scripts\python.exe -m tools.official_generate --seed 4242 --estate tmp\estate.db --csv-zip tmp\estate_csv.zip --answer-key tmp\evaluator-only\answer-key.json
-.\.venv\Scripts\python.exe -m forensic_auditor.official run tmp\estate_csv.zip --seed 4242 --output tmp\judge-case
-.\.venv\Scripts\python.exe specs\student-materials\forensic-auditor\validate_format.py --submission tmp\judge-case.json --estate-zip tmp\estate_csv.zip
-.\.venv\Scripts\python.exe -m forensic_auditor.official replay tmp\judge-case.replay.zip --output tmp\replayed-case
-.\.venv\Scripts\python.exe -m tools.official_evaluate --output tmp\official-evaluation
-```
+Built for the **HackMTY 2026 Infosys challenge**, this is a working local prototype. It helps a reviewer assess supported accounting findings; it does not establish legal guilt or guarantee that every fraud scheme will be found.
 
-Requires Python 3.11+ with SQLite deserialization support. Detection thresholds are constants in `forensic_auditor/official/audit.py`. Held-out results come from this project's own generator; they are not evidence of accuracy on the judges' estates. Live AI scheduling and provider cost capture are implemented with masked context and safe failure, but authenticated live latency/billing and the timed human demo still need verification.
+New to the project? Start below. Presenting it? Use the [presentation summary and three-minute script](docs/presentation_summary.md). Configuring it? See the [technical setup guide](docs/setup.md).
 
-HackMTY 2026 Infosys forensic investigation project. See [AGENTS.md](AGENTS.md) for project rules and [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the roadmap.
+## Why this project exists
 
-Working local MVP: **bare React + TypeScript + Vite** frontend and **FastAPI + Pydantic + NetworkX** backend. Includes ZIP/CSV ingestion, exact reconciliation, four versioned accounting rules, independent bank-flow discovery, fictional multi-scheme injections, source provenance, audit timeline, masked API views/exports, local source reveal, and grounded case Q&A.
+A suspicious invoice rarely tells the whole story. A reviewer may need to connect it to a supplier, check the bank payment, follow later transfers, and decide whether a refund or another legitimate explanation accounts for the activity.
 
-Offline review works without a model and is clearly labeled separately from AI investigation. OpenRouter directs the bounded tool loop using your configured model; the default is Nemotron 3 Ultra free for app-generated fictional demos.
+This application brings those checks together. Each finding includes the supporting records and calculation, while rejected and inconclusive leads remain visible with their reasons.
 
-## Run locally (PowerShell, Python 3.10+, Node.js 20.19+)
+## How it works
 
-```powershell
+1. **Load the company's records.** Upload a supported file or choose a fictional demo. The app checks its structure and keeps references to the source records.
+2. **Find leads.** Rules look for patterns worth investigating, such as payments linked to suspicious suppliers or money returning to the company.
+3. **Connect the evidence.** Local tools match records, identify documented account relationships and follow dated money movements.
+4. **Challenge the explanation.** The investigation checks alternatives such as refunds, legitimate loans, approved purchases or reversed accounting entries.
+5. **Validate the finding.** Code checks the rule, evidence references, relationships and amounts. Missing support can close a lead or limit the conclusion.
+6. **Review the case.** Explore the money trail, inspect evidence, read the calculation, ask questions and export the result.
+
+For example, imagine a fictional supplier receives a company payment and later transfers money to an employee's bank account. The official workflow checks the invoice link, transfer dates, exact account ownership and possible reimbursement explanations. Sharing a bank name is insufficient. The report distinguishes the invoice amount supporting the claim from the amount the employee received.
+
+## What it can investigate
+
+The official hackathon workflow implements checks for five scheme types. Publication depends on the specific evidence rules in the [official workflow guide](docs/official_estates.md).
+
+| Scheme | Plain-language meaning | Records the investigation connects |
+| --- | --- | --- |
+| Phantom vendor | A supplier may be billing without a supported purchase or delivery. | Paid invoices, supplier details, purchase orders, contracts and supplied SAT status. |
+| Kickback | Money paid to a supplier may reach an employee. | Invoices, dated transfers and exact employee bank-account matches. |
+| Round tripping | Money leaves the company and returns through a suspicious route. | Outgoing payments, intermediary transfers, returning funds and possible refund or loan explanations. |
+| Threshold splitting | Related purchases may be divided to avoid higher approval requirements. | Order amounts, dates, requester, supplier and documented or inferred approval limits. |
+| Revenue inflation | The books may show revenue that the supplied records do not support. | Invoice status, revenue entries, reversals and customer collections. |
+
+A **lead** is a suspicion to investigate. A **finding** has passed the implemented evidence checks. Official findings use **proven** when the records establish the implemented rule breach and **probable** when an element is inferred. These are application confidence labels, not legal judgments.
+
+## What the reviewer receives
+
+- **A case file:** findings, linked entities, confidence and limitations.
+- **An evidence trail:** source-record references and diagrams of money movements.
+- **A reproducible amount:** the calculation and supporting records. Invoice value, returned money, exposure and loss are different measures and must not be added indiscriminately.
+- **Investigation decisions:** alternative explanations checked and reasons for closing or leaving leads unresolved.
+- **Questions and answers:** explanations grounded in the current case, with evidence references.
+- **Exports:** JSON for structured data and readable HTML reports. The official workflow also provides a replay ZIP that reproduces the completed report without new model calls or network access.
+
+## Where AI fits
+
+The accounting checks run locally in Python. In **AI investigation mode**, a model accessed through OpenRouter chooses permitted review actions within time and step limits. It cannot bypass the evidence validator or rewrite the accounting rules.
+
+**Offline evidence review** runs without a language model or API key. It is explicitly labeled as offline review. Model failures leave an AI investigation incomplete.
+
+**Ask the Auditor** has its own mode selector: conversational AI explains a masked version of the case, while **Offline case extraction** retrieves supported information without network access. Choose offline extraction for a fully offline demo, even if the investigation itself already ran offline. Generated explanations do not change validated findings.
+
+## Two supported input workflows
+
+An *estate* means the collection of company records supplied for investigation.
+
+| Workflow | Input | Use it for |
+| --- | --- | --- |
+| Official hackathon | estate.db (SQLite database) or estate_csv.zip (the official CSV tables in a ZIP) | The five scheme types above, judge-format JSON and offline replay. |
+| Original CSV | A ZIP following this project's separate CSV contract | Excess settlement, documented delivery/payment violations, prohibited benefits and revenue-recognition discrepancies. |
+
+The official format includes suppliers, invoices, ledger entries, bank transactions, purchase orders, contracts, employees and a supplied SAT list. SAT is Mexico's tax authority; its listing is supporting information that must be considered alongside company records.
+
+The two formats are separate contracts; an arbitrary spreadsheet or ZIP will not necessarily load. See the [official estate format](docs/official_estates.md) and [original CSV contract](docs/input_contract.md).
+
+## Try it locally
+
+Install **Python 3.11+** with SQLite deserialization support and **Node.js 20.19+**. Python 3.12 has been used for this project. From the repository folder, run these commands in PowerShell:
+
+~~~powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 npm --prefix web ci
 npm --prefix web run build
 .\.venv\Scripts\python.exe -m uvicorn forensic_auditor.api:app --host 127.0.0.1 --port 8000
-```
+~~~
 
-Open **http://127.0.0.1:8000**, load the demo, keep Offline evidence review selected, and start an investigation. All five views use the live API; findings are not hard-coded in React. Build before starting the API so static assets are mounted.
+1. Open [the local app](http://127.0.0.1:8000).
+2. In **Load demo · hackathon-format test files**, select a fictional scenario and click **Load test estate**.
+3. Keep investigation mode offline and click **Investigate estate**.
+4. Open a finding, follow its money trail and inspect its evidence. Review a declined lead and its explanation.
+5. Select **Offline case extraction** to ask about the completed case without configuring AI.
+6. Download the report and replay bundle before restarting the server.
 
-For React development, keep the API running and start Vite in a second terminal:
+The seven practice estates cover the five individual schemes, a mixed scenario and a clean control. They are project-generated examples, not the judges' hidden data. See [practice files](demo-estates/README.md).
 
-```powershell
-npm --prefix web run dev
-```
+For development servers, AI configuration, voice and optional integrations, see [setup and technical reference](docs/setup.md). Command-line generation, official format validation and replay commands are in the [official estate guide](docs/official_estates.md).
 
-Open the printed Vite URL (normally http://127.0.0.1:5173). Vite proxies `/api` to port 8000. API docs: http://127.0.0.1:8000/docs.
+## Privacy and optional features
 
-On Windows, after installing dependencies, double-click `restart-servers.bat` to restart the API (8000) and Vite (5173) in the background. Open http://127.0.0.1:5173 for the current frontend; logs are in `tmp/servers/`. The launcher uses `scripts/restart-servers.ps1`, checks readiness, and refuses to stop a port owner it cannot identify as this project's server. Restarting the API clears in-memory datasets and investigations. This development shortcut does not rebuild the static frontend served on port 8000.
+Source records and identity matching remain local. External investigation scheduling receives a restricted, pseudonymous summary; conversational Q&A receives a separate masked case view. Masking replaces identifying details with aliases, but financial patterns and amounts can still be sensitive.
 
-## Saving analyses to Tiger Data (optional)
+The configured free model is restricted to fictional datasets generated inside the app. Uploaded records require offline review or a non-free model with enforced no-collection and zero-data-retention routing. Keys stay in server-side configuration. See [privacy and model controls](docs/privacy_and_models.md).
 
-1. Create a service in [Tiger Cloud](https://console.cloud.timescale.com/) and copy its connection string.
-2. Add it to your local `.env` as `TIGER_DATABASE_URL=postgres://tsdbadmin:...@....tsdb.cloud.timescale.com:5432/tsdb?sslmode=require`, run `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`, and restart the API.
+Optional features include:
 
-The `analyses` table is created on first use. Every finished CSV investigation and official estate run is saved as a **masked** case file with its status, mode, finding count, totals and dataset SHA-256. Browse, download or delete them in **Saved analyses**, or use `GET /api/analyses`, `GET /api/analyses/{id}` and `DELETE /api/analyses/{id}`. Original values, uploaded files and replay bundles are not stored, so a saved analysis cannot reveal sources or answer new questions. See [privacy and models](docs/privacy_and_models.md#tiger-data-archive) for what masking does and does not hide. Without the variable, nothing is saved.
+- **Voice questions through ElevenLabs:** spoken interaction for app-generated fictional demos. Microphone audio goes to the provider; voice requires separate configuration.
+- **Tiger Data archive:** save masked completed analyses to PostgreSQL. It does not preserve original source files or resume investigations.
+- **Solana Devnet integrity seal:** publish a fingerprint commitment that can help verify whether a sealed report changed. It does not prove the records or findings are true.
 
-To test against a real service: set `TIGER_TEST_DATABASE_URL` and run `.\.venv\Scripts\python.exe -m pytest tests\test_storage.py`.
+The app is a local prototype without authentication. Keep it bound to **127.0.0.1**. Active sessions are held in memory and are lost on restart; export the artifacts you need.
 
-## AI configuration
+## Current limits and validation
 
-### Real-time voice for the hackathon
+The system implements specific evidence rules, not unrestricted fraud understanding. Missing transfers, uncertain ownership, undocumented commercial purpose and unfamiliar accounting semantics can prevent a supported finding. CFDI electronic-invoice XML signature validation, live SAT fetching, source authenticity checks and production deployment hardening are outside the current scope.
 
-1. Add `ELEVENLABS_API_KEY` to your local `.env` (never browser code). Keep your existing `OPENROUTER_API_KEY`: the auditor still uses it for grounded answers. Optionally set `ELEVENLABS_VOICE_ID` to a voice you can access.
-2. Create the private voice agent once:
+Automated tests and synthetic evaluations cover the modeled rules, benign alternatives, citations, calculations and failure handling. Results on this project's own generated records do not establish accuracy on real companies or unseen judge datasets. Authenticated live AI latency, billing and the timed human demo require separate verification.
 
-   ```powershell
-   .\.venv\Scripts\python.exe -m tools.setup_voice
-   ```
+Developers can run:
 
-   This creates an `ask_auditor` client tool and an ElevenLabs agent, then saves their IDs in `.env` without replacing existing keys. The voice agent uses Gemini 2.5 Flash for conversation and delegates case questions to the configured OpenRouter auditor. Existing configured agents are left unchanged. The ElevenLabs key needs permission to create tools/agents and obtain conversation tokens. Review your account's available credits before the demo; voice usage is separate from OpenRouter usage.
-3. Build the frontend and restart the backend after installing this update. Load an **app-generated demo**, run an investigation, open **Ask the auditor**, and click **Start voice**. Allow microphone access. Ask in Spanish or English, interrupt naturally, or click **End voice**. Case answers and their citations appear in the existing chat; live speech transcripts appear in the voice panel.
-
-The browser uses ElevenLabs' authenticated WebRTC connection for microphone input, turn detection, interruptions and audio playback; no public tunnel is needed. Conversation tokens are ephemeral bearer credentials and must not be shared. The agent calls the browser's bounded `ask_auditor` tool, which invokes the local API and returns only the masked answer and citations. It receives no estate files or source-record dump. Sessions end after three minutes and the UI permits eight case questions. Leaving the auditor view ends voice. Auditing still waits for OpenRouter's complete response, so real-time audio does not guarantee instant case answers. Spoken summaries can differ from the cited answer and never change findings.
-
-Voice currently rejects uploaded datasets, including downloaded demos that are re-uploaded. Microphone audio is transmitted directly to ElevenLabs and cannot be masked locally; keep speech limited to fictional case questions. Agent setup disables voice recording and requests one-day transcript retention with deletion; it does not establish ZDR or administer account-wide logging. Existing OpenRouter privacy controls do not automatically apply to ElevenLabs. See [ElevenLabs client tools](https://elevenlabs.io/docs/eleven-agents/customization/tools/client-tools) and [WebRTC token authentication](https://elevenlabs.io/docs/api-reference/conversations/get-webrtc-token).
-
-The voice panel shows a live microphone input meter and allows muting and switching microphones during a call. If speech does not move the meter, choose the correct input and check its hardware mute. Recognized user speech appears in the transcript. Voice uses WebRTC with LiveKit pinned to 2.16.1 for ElevenLabs compatibility. Restart the backend and refresh the frontend together after this transport update; existing ElevenLabs agents do not need recreation.
-
-Validation uses mocked provider calls. Live microphone quality, interruptions, account provisioning, credit usage and end-to-end latency need a configured ElevenLabs key and a human rehearsal.
-
-Auditor answers render Markdown in both case views, including emphasis, nested lists, tables, quotes and code blocks. Raw HTML and automatic remote images are disabled; evidence citation controls remain separate.
-
-**Ask the Auditor** defaults to conversational AI in both case views, independently of investigation mode. It receives masked findings, calculations, money trails, lead dispositions and recorded checks, plus the last six successful exchanges. Known dataset identities and common contact/RFC/account patterns in questions are masked; do not add new confidential details. Citations must resolve to evidence in the current case. Explanations do not modify validated findings; citation existence does not guarantee prose correctness. Provider failures are displayed explicitly. Select **Offline case extraction** for network-free answers. Uploaded records still require a non-free model with no-collection/ZDR routing. Oversized context fails explicitly. The narrower controller projection described below applies to investigation scheduling, not conversational Q&A.
-
-Create `.env` from `.env.example` if it does not already exist. Keep an existing `.env`; do not overwrite your key. Fill it in:
-
-```dotenv
-OPENROUTER_API_KEY=your_openrouter_key
-OPENROUTER_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
-OPENROUTER_MAX_TOKENS=2048
-OPENROUTER_TIMEOUT_SECONDS=40
-OPENROUTER_REASONING=off
-```
-
-Use the exact provider model ID including `:free`. System environment variables override `.env`. The Overview page shows the effective model and whether a server key exists; it never returns the key. Configuration is read on new requests. Restart an old running backend after updating the code, and rebuild the frontend. `/api/config` and the **Check model connection** button provide sanitized diagnostics.
-
-Only typed pseudonymous summaries cross the model boundary: random session/lead aliases, lead type, permitted/completed actions, evidence/missing counts, and a verified-predicate boolean. Raw records, names, RFCs, accounts, descriptions, references, URLs, notes and user questions are excluded. Amount calculations and identity joins remain local. Responses must be locally valid JSON actions; one fenced JSON document is accepted, arbitrary prose is not. Up to twelve independent lead actions can be returned per call. Defaults: 60 tool steps, 180 seconds, 40 seconds per model request, 2048 output tokens, zero automatic retries. Cancellation stops before the next action and interrupts discovery; a remote request can finish its configured timeout.
-
-The old 250-token response limit could truncate a reasoning model before its JSON action. Reasoning is now disabled by default and excluded from returned output. No `response_format` is forced because this free endpoint does not support it. HTTP 401/403/404/429, token truncation, invalid responses and timeouts have controlled, actionable messages. No provider error body or private reasoning is displayed. Model availability and rate limits still depend on OpenRouter/NVIDIA.
-
-**Free-model privacy:** the [Nemotron free endpoint notice](https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b:free) prohibits confidential/personal data and describes usage logging for product improvement. Free model IDs are therefore accepted only for datasets generated inside the app. Downloading and re-uploading such a ZIP does not grant it trusted synthetic status. Uploaded datasets use offline mode or a non-free model routed with `data_collection: deny`, `zdr: true`, `allow_fallbacks: false`, and `require_parameters: true`. A model with no eligible endpoint fails; protections are never relaxed automatically. These controls were checked against [OpenRouter provider routing](https://openrouter.ai/docs/guides/routing/provider-selection) on September 12, 2026. They are provider routing commitments, not a claim of independent auditing of provider infrastructure. Check account-level prompt logging settings separately; pseudonymous investigation patterns can still be sensitive.
-
-The per-investigation cache includes dataset identity, model ID, prompt/privacy version and projected context. It never crosses dataset sessions. Provider-internal model revisions are not observable/pinned. Deleting a dataset cancels active work and releases its data, aliases and caches after in-flight work ends. This does not delete previously downloaded exports or optional SQLite archives.
-
-## Check the API connection
-
-After adding your key, run:
-
-```powershell
-.\.venv\Scripts\python.exe openrouter_client.py
-```
-
-This sends a small prompt to OpenRouter using the selected model and consumes API credit. It does not send project files or accounting records. The client has a 60-second network timeout and makes no automatic retries. Missing configuration, HTTP errors, and incomplete responses produce explicit errors.
-
-The controller calls `chat` with a shorter timeout and locally validates JSON action responses using Pydantic. The standalone connection check retains its 60-second timeout.
-
-## Verification
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m tools.official_evaluate --output tmp/official-evaluation
-.\.venv\Scripts\python.exe -m tools.legacy.evaluate --output tmp/holdout-evaluation.json
-.\.venv\Scripts\python.exe -m tools.legacy.evaluate --extended --output tmp/extended-evaluation.json
+~~~powershell
+.\.venv\Scripts\python.exe -m pytest tests -q
 npm --prefix web test
 npm --prefix web run build
-```
+.\.venv\Scripts\python.exe -m tools.official_evaluate --output tmp/official-evaluation
+~~~
 
-Tests mock transport and never use your real key. They cover exact amounts, clean controls, split/consolidated payments, refunds/credits, ownership gaps, missing/forged citations, currency separation, bounded traces, SAT history, uploaded instruction injection, malformed responses, cancellation, dataset isolation and fresh upload-to-export API flow. Existing client tests also run with `python -m unittest discover -s tests -v`.
+Use only the evaluator's frozen reporting seeds for held-out claims. See [recorded verification](docs/verification.md) and [pitch facts with evaluation caveats](docs/pitch_facts.md).
 
-## Input and live demo
+## Project map
 
-- [CSV input contract](docs/input_contract.md): exact filenames/columns, decimal money, allocations and subledger semantics.
-- [Three-minute demo and independent injection](docs/demo_runbook.md): fresh ZIP workflow, CLI backup, outage behavior and holdout evaluation.
+| Location | Purpose |
+| --- | --- |
+| [web/](web/) | React and TypeScript browser interface, built with Vite. |
+| [forensic_auditor/](forensic_auditor/) | Python backend, local evidence tools, validation, reporting and FastAPI endpoints. |
+| [forensic_auditor/official/](forensic_auditor/official/) | Official estate ingestion, five scheme checks, judge reports and replay. |
+| [tools/](tools/) | Fictional dataset generators, separate answer keys, evaluators and setup utilities. |
+| [tests/](tests/) | Backend and domain verification. |
+| [specs/student-materials/](specs/student-materials/) | Supplied hackathon formats and requirements. |
+| [docs/](docs/) | Input contracts, setup, privacy, verification and presentation material. |
 
-## MVP scope and limitations
-
-Publishable predicates: **excess settlement**, **payment contrary to documented delivery terms**, **prohibited benefit under supplied payment policy**, and **revenue contrary to documented recognition terms**. Each revalidates source records and requires its specific corroboration. Findings establish the stated discrepancy within supplied records, not legal guilt, authenticity, intent, or general proof that a supplier is fictitious. SAT status and graph cycles alone never produce an accusation. Amount categories are non-additive because service exposure can overlap excess settlement; observed returns and revenue overstatement are not cash loss. Shared return transfers are deduplicated within that category.
-
-Independent bank discovery is capped at 10,000 examined edges and 128 candidates under the investigation deadline. Traces use four hops, 30 days, 100 output edges and 1,000 examined edges. Truncation is explicit. Q&A extracts current-case calculations, findings, checks, missing evidence and dispositions; unsupported topics abstain. It does not perform arbitrary counterfactual calculations. CSV v1 remains supported; optional v2 tables add contracts, dated ownership, attributed evidence, return policies/linkage, and sales/receivables. CFDI XML, official SAT fetching and authenticity verification remain out of scope.
-
-Default API views and JSON/HTML exports mask identifiers and omit unrestricted text. The UI's **Reveal original values locally** action and explicitly marked full-evidence HTML export expose originals only on this local server. Both export formats include the audit trail. This prototype has no authentication: full-record access is an explicit local reviewer operation, not a security boundary against other users of the same machine.
-
-This is a single-machine **local prototype**, without authentication or deployment hardening. Keep it bound to loopback. Eight dataset slots and two active investigations live in memory; restarting loses them. Export a case to retain it. CLI `--sqlite` optionally archives source evidence; durable/resumable investigations are not implemented.
-
-Small synthetic holdout results do not establish production fraud accuracy. Rehearse live model availability and latency before the challenge demo.
-
-### Verification in this checkout
-
-The implementation was tested with Python 3.12. Tests use mocked model transport and do not consume your key. The extended offline evaluation uses 60 datasets over the frozen manifest in `tests/holdout_manifest.json`; exact totals and zero unsupported findings on these declared fixtures do not establish real-world accuracy. Live model performance remains unverified without a configured server API key.
-
-Where npm is unavailable, this checkout was built with pnpm-installed dependencies using:
-
-```powershell
-pnpm --dir web install
-node web/node_modules/typescript/bin/tsc -b web
-node web/node_modules/vite/bin/vite.js build web
-```
-
-The pnpm workspace explicitly allows the standard esbuild install script. Vite's subprocess may need local sandbox permission. See [privacy and model controls](docs/privacy_and_models.md) for the current restrictions and diagnostics.
-
-AI latency: the CSV controller prefers bundled local evidence inspection, followed by separate alternative and conclusion decisions. It requests up to twelve distinct leads per call and preserves validated queued actions on AI resume. The 180-second default remains bounded; provider timeouts still leave an explicitly incomplete case.
+The [challenge brief](HackMTY_2026_Infosys_Challenge_Forensic.md) defines the problem. The [implementation plan](IMPLEMENTATION_PLAN.md) records delivery status and design history. [AGENTS.md](AGENTS.md) contains contributor guidance.

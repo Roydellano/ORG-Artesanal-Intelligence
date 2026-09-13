@@ -7,3 +7,4 @@ python-multipart>=0.0.20,<1
 httpx>=0.28,<1
 psycopg[binary]>=3.2,<4
 pytest>=8,<10
+solders==0.29.0

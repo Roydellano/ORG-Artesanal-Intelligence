@@ -1,5 +1,9 @@
 # Forensic Auditor implementation plan
 
+## Practice estate library — September 13 update
+
+Overview now mounts the official-estate interface below the original demo controls. Seven prebuilt fictional CSV ZIPs cover each official scheme individually, all five together, and a clean control with innocent lookalikes. `tools/build_demo_estates.py` rebuilds the files using development seeds 6101–6107; the runtime only serves an allowlisted catalog and records. Demo loading uses the ordinary official upload endpoint with automatic company inference and offline review. The supplied student-materials examples remain format references, not practice datasets or ground truth. Download/upload/investigation/export coverage lives in `tests/test_demo_estates.py`.
+
 ## Hackathon real-time voice — September 12 update
 
 Voice follow-up repair: replace the forced WebSocket audio transport with authenticated WebRTC and pin LiveKit 2.16.1 for provider compatibility. Add live SDK input metering, explicit mute/unmute and in-call microphone switching so a silent input can be diagnosed and recovered. Token contracts are tested locally; a human microphone rehearsal remains required to establish that the reported repeat-question symptom is resolved on the user's device.
@@ -352,3 +356,9 @@ Before implementing the XML adapter, retrieve the official CFDI 4.0 schema and d
 ### September 12 latency correction
 
 The CSV controller now prefers one bundled local evidence inspection per lead, then separate model-selected alternative testing and conclusion. Up to twelve independent lead actions share a call. Each underlying check retains its evidence retrieval and timeline entry; publication still requires the deterministic gate. The default CSV run budget is 180 seconds, with zero automatic retries. AI resume retains validated unexecuted actions. Live provider latency remains unverified.
+# September 13 addition: optional Devnet integrity
+
+Implemented a separate integrity sidecar for CSV and official-estate case views. One Devnet Memo transaction commits a frozen masked report and the existing source identity at sealing time, with a private random nonce. This optional implementation choice leaves challenge/judge formats and evidence-validation authority unchanged. It does not separately timestamp ingestion or establish source authenticity. UI anchoring is asynchronous, verification requires a successful finalized transaction and trusted auditor signer, and proof bundles support later tamper checks. Devnet may reset; download receipts before session deletion/restart. See `docs/solana_integrity.md` for protocol, controls, tests and remaining production limitations. Live faucet funding/finalization must be verified separately from mocked tests.
+
+### Investigation visual explanation update
+Implemented a lead-disposition ring, selectable verified-finding explorer, integer-based reconciliation bars, exact calculation and evidence controls, and selected-finding highlights on the observed-transfer graph. The original CSV Investigation view uses existing validated case facts; the official estate case view retains its separate contract. Graph controls support keyboard activation and resolve masked evidence references returned by trace tools.
