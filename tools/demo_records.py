@@ -1,8 +1,8 @@
 """Generation process emits records only; evaluator answers never enter the API process."""
 import argparse
 import sys
-from forensic_auditor.demo import generate
-from forensic_auditor.scenarios import generate_scenario
+from tools.legacy.demo import generate
+from tools.legacy.scenarios import generate_scenario
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

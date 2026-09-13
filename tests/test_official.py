@@ -11,10 +11,10 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from forensic_auditor.official.estate import load, cents
+from forensic_auditor.official.estate import load, load_any, load_zip, infer_company, cents
 from forensic_auditor.official.audit import investigate, validate_finding
-from forensic_auditor.official.report import bundle, replay, render, canonical, exposure, validate_publication
-from tools.official_generate import generate, COMPANY
+from forensic_auditor.official.report import bundle, replay, render, canonical, exposure, fingerprint, validate_publication
+from tools.official_generate import generate, generate_records, export_csv_zip, COMPANY
 
 VALIDATOR = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'specs/student-materials/forensic-auditor/validate_format.py'))
 
@@ -61,8 +61,10 @@ def test_clean_controls_declined_from_records(tmp_path, seed):
     assert all(l['tool_calls_made'] and l['evidence_examined'] for l in case['leads_not_pursued'])
 
 
-@pytest.mark.parametrize('kind,table', [('phantom_vendor', 'contracts'), ('kickback', 'employees'),
-                                      ('round_tripping', 'contracts'), ('threshold_splitting', 'contracts'),
+# Removing a typed contract can leave a records-based predicate satisfied (e.g. a full return through
+# intermediaries), so the removed evidence here is what every predicate for that scheme needs.
+@pytest.mark.parametrize('kind,table', [('phantom_vendor', 'bank_txns'), ('kickback', 'employees'),
+                                      ('round_tripping', 'bank_txns'), ('threshold_splitting', 'purchase_orders'),
                                       ('revenue_inflation', 'ledger')])
 def test_removing_required_evidence_downgrades(estate, kind, table):
     _, data, _ = estate
@@ -240,6 +242,104 @@ def test_overlapping_exposure_and_path_tampering(estate):
     assert validate_finding(data, finding)
 
 
+@pytest.fixture
+def records_estate(tmp_path):
+    path = tmp_path / 'records.db'
+    truth = generate_records(404, path)
+    return path, load(path.read_bytes()), truth
+
+
+def matches(case, truth):
+    return [s for s in truth['schemes'] if any(f['scheme_type'] == s['type'] and set(f['entities']) & set(s['entities'])
+                                               for f in case['findings'])]
+
+
+def test_records_only_estate_finds_schemes_without_typed_terms(records_estate):
+    path, data, truth = records_estate
+    from forensic_auditor.official.audit import terms
+    assert not any(terms(r) for r in data.rows['contracts'].values())
+    assert COMPANY not in data.rows['vendors']
+    company = infer_company(data)
+    assert company == truth['company_rfc']
+    case = investigate(data, 404, company)
+    assert len(matches(case, truth)) == len(truth['schemes']) == 5
+    assert len(case['findings']) == 5
+    accused = {e for f in case['findings'] for e in f['entities']}
+    assert not any(d['entity'] in accused for d in truth['decoys'])
+    assert not VALIDATOR['validate_structure'](case)
+    assert not VALIDATOR['validate_against_estate'](case, str(path))
+    assert {'proven', 'probable'} >= {f['confidence'] for f in case['findings']}
+    for finding in case['findings']:
+        assert finding['challenges'] and all(c['accusation_survives'] for c in finding['challenges'])
+    assert {l['closed_by'] for l in case['leads_not_pursued']} <= {'investigator', 'challenger', 'validator'}
+    report = render(data, case, reveal=True)
+    assert report.count('Adversarial review') == len(case['findings'])
+
+
+@pytest.mark.parametrize('seed', [606, 707])
+def test_records_clean_estate_accuses_nobody(tmp_path, seed):
+    path = tmp_path / 'clean.db'
+    truth = generate_records(seed, path, clean=True)
+    data = load(path.read_bytes())
+    case = investigate(data, seed, infer_company(data))
+    assert not case['findings']
+    assert case['leads_not_pursued'] and case['status'] == 'offline_complete'
+
+
+def test_csv_zip_estate_matches_sqlite(records_estate, tmp_path):
+    path, data, truth = records_estate
+    zipped = tmp_path / 'estate_csv.zip'
+    export_csv_zip(path, zipped)
+    from_zip = load_any(zipped.read_bytes())
+    case = investigate(data, 404, truth['company_rfc'])
+    zip_case = investigate(from_zip, 404, infer_company(from_zip))
+    assert fingerprint(zip_case) == fingerprint(case)
+    assert not VALIDATOR['validate_against_estate_zip'](zip_case, str(zipped))
+    with pytest.raises(ValueError):
+        load_zip(b'PK' + b'\x00' * 20)
+
+
+def test_same_bank_code_is_not_account_ownership(records_estate):
+    _, data, truth = records_estate
+    case = investigate(data, 404, truth['company_rfc'])
+    finding = next(f for f in case['findings'] if f['scheme_type'] == 'kickback')
+    emp = next(e for e in finding['entities'] if e.startswith('EMP:'))
+    clabe = data.row('employees', emp)['bank_clabe']
+    changed = edit(data, 'UPDATE employees SET bank_clabe=? WHERE emp_id=?', (clabe[:3] + '999999999999999', emp))
+    assert not any(f['scheme_type'] == 'kickback' for f in investigate(changed, 404, truth['company_rfc'])['findings'])
+
+
+def test_reimbursement_reference_is_a_benign_explanation(records_estate):
+    _, data, truth = records_estate
+    case = investigate(data, 404, truth['company_rfc'])
+    finding = next(f for f in case['findings'] if f['scheme_type'] == 'kickback')
+    last = next(e for e in finding['exhibits'] if e['exhibit_id'] == finding['money_trail'][-1]['exhibit_id'])
+    changed = edit(data, 'UPDATE bank_txns SET reference=? WHERE txn_id=?', ('Reembolso de viáticos', last['record_id']))
+    after = investigate(changed, 404, truth['company_rfc'])
+    assert not any(f['scheme_type'] == 'kickback' for f in after['findings'])
+    assert any(l['signal'] == 'kickback' and l['closed_by'] == 'challenger' for l in after['leads_not_pursued'])
+
+
+def test_replay_and_case_file_with_sockets_disabled(records_estate, monkeypatch):
+    import socket
+    _, data, truth = records_estate
+    case = investigate(data, 404, truth['company_rfc'])
+    archive = bundle(data, case)
+    def refuse(*args, **kwargs):
+        raise AssertionError('Network forbidden')
+    monkeypatch.setattr(socket.socket, 'connect', refuse)
+    monkeypatch.setattr(socket, 'create_connection', refuse)
+    recovered, saved = replay(archive)
+    assert fingerprint(saved) == fingerprint(case)
+    assert render(recovered, saved, reveal=True) == render(data, case, reveal=True)
+
+
+def test_nullable_ledger_money_is_a_visibility_gap(estate):
+    _, data, _ = estate
+    changed = edit(data, 'UPDATE ledger SET debit=NULL WHERE debit=0')
+    assert investigate(changed, 101, COMPANY)['status'] == 'offline_complete'
+
+
 def test_answer_keys_are_not_imported_by_runtime():
     import ast
     root = Path(__file__).resolve().parents[1]
@@ -253,7 +353,7 @@ def test_answer_keys_are_not_imported_by_runtime():
         path = root.joinpath(*name.split('.')).with_suffix('.py')
         if not path.exists():
             continue
-        assert name not in {'forensic_auditor.demo', 'forensic_auditor.scenarios', 'forensic_auditor.evaluate'}
+        assert name not in {'forensic_auditor.demo', 'forensic_auditor.scenarios', 'forensic_auditor.evaluate', 'forensic_auditor.inject'}
         assert not name.startswith('tools.')
         tree = ast.parse(path.read_text(encoding='utf-8'))
         for node in ast.walk(tree):

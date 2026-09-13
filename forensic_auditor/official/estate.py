@@ -1,9 +1,14 @@
 """Bounded read-only ingestion; uploaded database objects are never executed."""
+from collections import Counter
+import csv
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 import hashlib
+import io
+from pathlib import Path
 import sqlite3
+import zipfile
 
 MAX_BYTES = 20_000_000
 MAX_ROWS = 20_000
@@ -21,6 +26,7 @@ TABLES = {
 IDS = {table: columns.split()[0] for table, columns in TABLES.items()}
 AMOUNTS = {'invoices': 'total', 'bank_txns': 'amount', 'purchase_orders': 'amount', 'contracts': 'value'}
 MONEY_FIELDS = {'subtotal', 'iva', 'total', 'debit', 'credit', 'amount', 'value'}
+REQUIRED_MONEY = {'total', 'amount'}  # invoice totals and transfer/order amounts; other money may be NULL
 DATE_FIELDS = {'date', 'issue_date', 'registered_date', 'start_date', 'hire_date', 'publication_date'}
 
 
@@ -95,7 +101,7 @@ def load(content: bytes):
                 for field, value in row.items():
                     if isinstance(value, bytes) or (isinstance(value, str) and len(value) > MAX_TEXT):
                         raise ValueError(f'{table}: invalid or oversized field')
-                    if field in MONEY_FIELDS:
+                    if field in MONEY_FIELDS and (value is not None or field in REQUIRED_MONEY):
                         cents(value)
                     if field in DATE_FIELDS and value:
                         date.fromisoformat(str(value))
@@ -110,3 +116,77 @@ def load(content: bytes):
         raise ValueError('Invalid or over-budget SQLite estate') from error
     finally:
         conn.close()
+
+
+def load_zip(content: bytes):
+    """Convert the official estate_csv.zip (eight UTF-8 CSVs) into the same checked SQLite form.
+
+    CLABEs, RFCs and ids stay text; empty cells become NULL. The replay archive stores the converted
+    database, so later replays do not depend on the original ZIP bytes.
+    """
+    if len(content) > MAX_BYTES or not content.startswith(b'PK'):
+        raise ValueError('Provide an estate_csv.zip no larger than 20 MB')
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile:
+        raise ValueError('Invalid estate ZIP') from None
+    with archive:
+        names = {Path(info.filename).name: info for info in archive.infolist() if not info.is_dir()}
+        if sum(info.file_size for info in names.values()) > 4 * MAX_BYTES:
+            raise ValueError('Estate ZIP expands beyond the size limit')
+        conn = sqlite3.connect(':memory:')
+        try:
+            count = 0
+            for table, columns in TABLES.items():
+                names_list = columns.split()
+                kinds = ['REAL' if c in MONEY_FIELDS else 'INTEGER' if c == 'entry_id' else 'TEXT' for c in names_list]
+                conn.execute(f'CREATE TABLE {table} (' + ', '.join(f'{c} {k}' + (' PRIMARY KEY' if i == 0 else '')
+                                                                  for i, (c, k) in enumerate(zip(names_list, kinds))) + ')')
+                if f'{table}.csv' not in names:
+                    raise ValueError(f'Estate ZIP is missing {table}.csv')
+                text = archive.read(names[f'{table}.csv']).decode('utf-8-sig')
+                reader = csv.DictReader(io.StringIO(text, newline=''))
+                if not set(names_list) <= set(reader.fieldnames or []):
+                    raise ValueError(f'{table}.csv: missing required columns')
+                for row in reader:
+                    count += 1
+                    if count > MAX_ROWS:
+                        raise ValueError('Estate exceeds 20,000 records')
+                    values = []
+                    for column, kind in zip(names_list, kinds):
+                        value = (row.get(column) or '').strip()
+                        if value == '':
+                            values.append(None)
+                        elif kind == 'REAL':
+                            cents(value)
+                            values.append(float(Decimal(value)))
+                        elif kind == 'INTEGER':
+                            values.append(int(value))
+                        else:
+                            values.append(value)
+                    conn.execute(f'INSERT INTO {table} VALUES ({",".join("?" * len(values))})', values)
+            conn.commit()
+            serialized = conn.serialize()
+        except (sqlite3.Error, UnicodeDecodeError, csv.Error) as error:
+            raise ValueError('Invalid estate CSV content: ' + type(error).__name__) from None
+        except (ValueError, InvalidOperation) as error:
+            raise ValueError(str(error) or 'Invalid estate CSV value') from None
+        finally:
+            conn.close()
+    return load(serialized)
+
+
+def load_any(content: bytes):
+    """Accept either judge format: SQLite estate.db or estate_csv.zip."""
+    return load_zip(content) if content.startswith(b'PK') else load(content)
+
+
+def infer_company(estate):
+    """Audited company = the RFC on the most invoices (issuer or receiver). Ties break alphabetically."""
+    counts = Counter()
+    for invoice in estate.rows['invoices'].values():
+        counts[invoice['issuer_rfc']] += 1
+        counts[invoice['receiver_rfc']] += 1
+    if not counts:
+        raise ValueError('Cannot infer the audited company RFC from an estate without invoices; supply it explicitly')
+    return min(counts, key=lambda rfc: (-counts[rfc], rfc))

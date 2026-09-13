@@ -14,9 +14,9 @@ The selected free Nemotron endpoint works only with these app-generated fictiona
 Independent injection into a freshly generated fictional estate:
 
 ```powershell
-.\.venv\Scripts\python.exe -m forensic_auditor.demo --seed 88217 --clean --output tmp/clean.zip
-.\.venv\Scripts\python.exe -m forensic_auditor.inject tmp/clean.zip --seed 18779 --scheme all --output tmp/fresh.zip --truth tmp/evaluator-only.json
-.\.venv\Scripts\python.exe -m forensic_auditor.evaluate --extended --output tmp/extended-evaluation.json
+.\.venv\Scripts\python.exe -m tools.legacy.demo --seed 88217 --clean --output tmp/clean.zip
+.\.venv\Scripts\python.exe -m tools.legacy.inject tmp/clean.zip --seed 18779 --scheme all --output tmp/fresh.zip --truth tmp/evaluator-only.json
+.\.venv\Scripts\python.exe -m tools.legacy.evaluate --extended --output tmp/extended-evaluation.json
 ```
 
 Use `--scheme service`, `return`, `sale`, or `cycle` for an individual new hypothesis; add `--benign` for legitimate lookalikes. The original excess injector remains the default. The extended evaluator uploads 60 datasets through the API using the frozen manifest, records incomplete outcomes, exact category totals, finding precision/recall and runtime, and deletes each session afterwards. `--extended --mode ai` requires eligible uploaded-data model routing and can consume credit; do not run it with a free-only configuration. Live cost/latency are not established by offline evaluation.
@@ -35,8 +35,8 @@ Build the React app and start the API using README.md. Verify live OpenRouter av
 From the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m forensic_auditor.demo --seed 7811 --clean --output tmp/clean.zip
-.\.venv\Scripts\python.exe -m forensic_auditor.inject tmp/clean.zip --seed 91373 --output tmp/fresh.zip --truth tmp/evaluator-only.json
+.\.venv\Scripts\python.exe -m tools.legacy.demo --seed 7811 --clean --output tmp/clean.zip
+.\.venv\Scripts\python.exe -m tools.legacy.inject tmp/clean.zip --seed 91373 --output tmp/fresh.zip --truth tmp/evaluator-only.json
 ```
 
 The injector only accepts fully settled invoices from suppliers explicitly named `(ficticio)`. It adds a payment and allocation; truth is written separately. Omit `--clean` from the generator to include refunded overpayments, split settlement, credit, disputed-delivery and dated-status controls.
@@ -60,7 +60,7 @@ Add `--mode ai` for OpenRouter or `--sqlite tmp/evidence.sqlite` for optional lo
 ## Evaluation
 
 ```powershell
-.\.venv\Scripts\python.exe -m forensic_auditor.evaluate --output tmp/holdout-evaluation.json
+.\.venv\Scripts\python.exe -m tools.legacy.evaluate --output tmp/holdout-evaluation.json
 ```
 
 Ten fixed evaluator seeds differ from unit/UI seeds. Each runs a mixed estate and clean control. Metrics cover only excess settlement, citations, exact amount, abstention and offline runtime. Small fixtures from one generator do not estimate production accuracy or establish detection of fictitious services, fabricated sales or kickbacks.

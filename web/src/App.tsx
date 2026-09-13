@@ -14,6 +14,7 @@ import {
   Fingerprint,
   FolderOpen,
   GitBranch,
+  History,
   LayoutDashboard,
   LoaderCircle,
   Play,
@@ -59,13 +60,15 @@ type View =
   | "Investigation"
   | "Case file"
   | "Source records"
-  | "Ask the auditor";
+  | "Ask the auditor"
+  | "Saved analyses";
 const nav: [View, typeof Search][] = [
   ["Overview", LayoutDashboard],
   ["Investigation", GitBranch],
   ["Case file", FileCheck2],
   ["Source records", Database],
   ["Ask the auditor", CircleHelp],
+  ["Saved analyses", History],
 ];
 const toolNames: Record<string, string> = {
   lookup_supplier: "Linked supplier & ownership",
@@ -259,6 +262,8 @@ export default function App() {
   const [question, setQuestion] = useState("");
   const [answers, setAnswers] = useState<Json[]>([]);
   const [answerMode, setAnswerMode] = useState("ai");
+  const [archive, setArchive] = useState<Json>({ items: [] });
+  const [savedCase, setSavedCase] = useState<Json | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const sessionRef = useRef<string | null>(null);
   const closeEvidence = useRef<HTMLButtonElement>(null);
@@ -270,6 +275,7 @@ export default function App() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
+    if (view === "Saved analyses") refreshArchive();
   }, [view]);
 
   useEffect(() => {
@@ -385,19 +391,35 @@ export default function App() {
       setQuestion("");
     });
   }
+  function saveJson(content: Json, filename: string) {
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(content, null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
   async function downloadJson() {
     await perform(async () => {
-      const content = await request(`${base}/export/json`);
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(content, null, 2)], {
-          type: "application/json",
-        }),
-      );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "case-file.json";
-      a.click();
-      URL.revokeObjectURL(url);
+      saveJson(await request(`${base}/export/json`), "case-file.json");
+    });
+  }
+  async function refreshArchive() {
+    await perform(async () => setArchive(await request("/analyses")));
+  }
+  async function openSaved(id: string) {
+    await perform(async () => setSavedCase(await request(`/analyses/${id}`)));
+  }
+  async function deleteSaved(id: string) {
+    if (!window.confirm("Delete this saved analysis from Tiger Data? This cannot be undone.")) return;
+    await perform(async () => {
+      await request(`/analyses/${id}`, { method: "DELETE" });
+      if (savedCase?.id === id) setSavedCase(null);
+      setArchive(await request("/analyses"));
     });
   }
   const EvidenceLinks = ({ refs }: { refs: string[] }) => (
@@ -510,6 +532,8 @@ export default function App() {
                       "Original records are always one click away.",
                     "Ask the auditor":
                       "Answers extracted from this case, with the evidence to inspect.",
+                    "Saved analyses":
+                      "Masked case files from earlier runs, stored in Tiger Data.",
                   }[view]
                 }
               </p>
@@ -765,13 +789,15 @@ export default function App() {
                       : "Offline review is labeled separately from an AI investigation. Findings still require verified relationships and exact calculations."}
                   </p>
                   <p className="mode-note">Model: {configuration.model || "Not configured"}. {configuration.configured ? "Server key configured." : "Server API key is missing."}</p>
-                  <button className="secondary" disabled={busy || running} onClick={() => perform(async () => {
-                    const result = await post("/check-model", {}); setConfiguration(result); setModelStatus("Connection successful. No accounting records were sent.");
-                  })}>Check model connection</button>
-                  {modelStatus && <p>{modelStatus}</p>}
-                  {dataset && <button className="secondary" disabled={busy} onClick={() => perform(async () => {
-                    await request(base, {method: "DELETE"}); sessionRef.current = null; setDataset(null); setCase(null); setEvidence(null); setAnswers([]); setRecords({rows: [], total: 0});
-                  })}>Delete dataset from memory</button>}
+                  <div className="panel-actions">
+                    <button className="secondary" disabled={busy || running} onClick={() => perform(async () => {
+                      const result = await post("/check-model", {}); setConfiguration(result); setModelStatus("Connection successful. No accounting records were sent.");
+                    })}>Check model connection</button>
+                    {dataset && <button className="secondary" disabled={busy} onClick={() => perform(async () => {
+                      await request(base, {method: "DELETE"}); sessionRef.current = null; setDataset(null); setCase(null); setEvidence(null); setAnswers([]); setRecords({rows: [], total: 0});
+                    })}>Delete dataset from memory</button>}
+                  </div>
+                  {modelStatus && <p className="mode-note">{modelStatus}</p>}
                   <div className="demo-row">
                     <span>Explore fictional records</span>
                     <div>
@@ -796,7 +822,7 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  <label>Fictional scenario <select value={scenario} onChange={e => setScenario(e.target.value)} disabled={running}>
+                  <label className="scenario-option">Fictional scenario <select value={scenario} onChange={e => setScenario(e.target.value)} disabled={running}>
                     {["all", "excess", "service", "return", "sale", "cycle"].map(value => <option key={value} value={value}>{value}</option>)}
                   </select></label>
                   <label className="clean-option">
@@ -1037,7 +1063,7 @@ export default function App() {
                     </a>
                   </div>
                 </div>
-                <section className="panel"><h3>Separate amount categories</h3>
+                <section className="panel category-panel"><h3>Separate amount categories</h3>
                   <p>{caseFile.total_definition}</p>
                   {Object.entries(caseFile.totals_by_category || {}).map(([category, values]) => <p key={category}><b>{category.replaceAll("_", " ")}</b>: {Object.entries(values).map(([currency, amount]) => money(amount, currency)).join(" · ")}</p>)}
                   {caseFile.discovery?.truncated && <p>Discovery was truncated. This case does not cover all candidate paths.</p>}
@@ -1272,7 +1298,7 @@ export default function App() {
                       Chat with the AI using this case’s findings, calculations,
                       evidence trails and investigation decisions.
                     </p>
-                    <label>Answer mode <select value={answerMode} onChange={e => setAnswerMode(e.target.value)} disabled={busy}>
+                    <label className="answer-mode">Answer mode <select value={answerMode} onChange={e => setAnswerMode(e.target.value)} disabled={busy}>
                       <option value="ai">AI auditor</option>
                       <option value="offline">Offline case extraction</option>
                     </select></label>
@@ -1350,6 +1376,100 @@ export default function App() {
                 </aside>
               </div>
             ))}
+          {view === "Saved analyses" && (
+            <>
+              {!archive.enabled ? (
+                <section className="panel empty-state">
+                  <History size={32} />
+                  <h2>Saving is off.</h2>
+                  <p>
+                    Set TIGER_DATABASE_URL in the server .env and restart the API.
+                    Completed investigations are then saved as masked case files.
+                  </p>
+                </section>
+              ) : (
+                <>
+                  {archive.last_error && (
+                    <div className="warning-banner">
+                      The last analysis was not saved: {archive.last_error}
+                    </div>
+                  )}
+                  <section className="panel records-panel">
+                    <div className="records-header">
+                      <span className="small-label">
+                        {archive.items.length} SAVED · MASKED VIEWS ONLY
+                      </span>
+                      <button className="secondary" disabled={busy} onClick={refreshArchive}>
+                        <RotateCw size={14} /> Refresh
+                      </button>
+                    </div>
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Saved</th><th>Type</th><th>Status</th><th>Mode</th>
+                            <th>Findings</th><th>Totals</th><th>Dataset SHA-256</th><th />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {archive.items.map((item: Json) => (
+                            <tr key={item.id}>
+                              <td>{new Date(item.created_at).toLocaleString()}</td>
+                              <td>{item.kind === "official" ? "Judge estate" : "CSV records"}{item.synthetic ? " · demo" : ""}</td>
+                              <td><Badge value={item.status} /></td>
+                              <td>{item.mode}</td>
+                              <td>{item.findings_count} / {item.leads_count} leads</td>
+                              <td>
+                                {item.kind === "official"
+                                  ? (item.totals.schemes || []).join(", ").replaceAll("_", " ") || "—"
+                                  : Object.entries(item.totals).map(([currency, value]) => money(value as number, currency)).join(" · ") || "—"}
+                              </td>
+                              <td><code>{item.dataset_sha256.slice(0, 12)}…</code></td>
+                              <td>
+                                <button className="source-button" disabled={busy} onClick={() => openSaved(item.id)}>Open</button>
+                                <button className="source-button" disabled={busy} onClick={() => deleteSaved(item.id)} aria-label="Delete saved analysis"><X size={14} /></button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {!archive.items.length && (
+                        <p className="padded muted">
+                          No saved analyses yet. Completed investigations appear here.
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                  {savedCase && (
+                    <section className="panel">
+                      <div className="panel-title">
+                        <h2>{savedCase.kind === "official" ? "Judge estate case" : "CSV case"} · {new Date(savedCase.created_at).toLocaleString()}</h2>
+                        <button className="secondary" onClick={() => saveJson(savedCase.masked_case, `saved-case-${savedCase.id}.json`)}>
+                          <ArrowDownToLine size={14} /> Masked JSON
+                        </button>
+                      </div>
+                      <p className="mode-note">
+                        Read-only masked view. Aliases do not resolve to source records. Load the original dataset again to inspect evidence or ask questions.
+                      </p>
+                      {savedCase.masked_case.findings.map((finding: Json, i: number) => (
+                        <article className="panel finding" key={finding.id || finding.finding_id || i}>
+                          <div className="tiny-label">{finding.rule || finding.scheme_type}</div>
+                          <h3>{finding.title || String(finding.scheme_type).replaceAll("_", " ")}</h3>
+                          <p>{finding.claim || finding.summary || (finding.entities || []).join(", ")}</p>
+                          <b>{finding.amount_centavos !== undefined ? money(finding.amount_centavos, finding.currency) : `MXN ${finding.peso_amount}`}</b>
+                        </article>
+                      ))}
+                      {!savedCase.masked_case.findings.length && <p className="muted">No finding met the evidence gate in this run.</p>}
+                      <details>
+                        <summary>Inspect the full masked case</summary>
+                        <pre>{JSON.stringify(savedCase.masked_case, null, 2)}</pre>
+                      </details>
+                    </section>
+                  )}
+                </>
+              )}
+            </>
+          )}
           <footer>
             <span>THE FORENSIC AUDITOR</span>
             <span>Prove the discrepancy. Preserve the uncertainty.</span>
@@ -1391,7 +1511,7 @@ export default function App() {
                 <X size={22} />
               </button>
             </header>
-            <button className="secondary" onClick={() => showEvidence(evidenceRef, true)}>Reveal original values locally</button>
+            <button className="secondary reveal-button" onClick={() => showEvidence(evidenceRef, true)}>Reveal original values locally</button>
             <div className="provenance">
               <span>
                 <b>File</b>

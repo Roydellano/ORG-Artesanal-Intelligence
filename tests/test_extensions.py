@@ -11,11 +11,11 @@ from fastapi.testclient import TestClient
 
 from forensic_auditor.api import app, sessions
 from forensic_auditor.data import load_zip, load_files
-from forensic_auditor.demo import generate
+from tools.legacy.demo import generate
 from forensic_auditor.investigation import Investigation, answer
 from forensic_auditor.privacy import ModelProjection, Presentation
 from forensic_auditor.reporting import export_case, printable
-from forensic_auditor.scenarios import generate_scenario, pack
+from tools.legacy.scenarios import generate_scenario, pack
 from forensic_auditor.schemes import discover, conclude_scheme, bank_trace, totals
 from forensic_auditor.schemes import validate_scheme_finding
 from openrouter_client import chat, OpenRouterError

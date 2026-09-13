@@ -6,20 +6,24 @@ to confirm that what your system emits is the shape judges can read.
 
     python3 validate_format.py --submission my_findings.json
 
-Optionally point it at your own estate to confirm every cited exhibit
-record_id actually exists in your database, and that peso_amount reconciles
-to the cited exhibits:
+Optionally point it at your estate to confirm every cited exhibit record_id
+actually exists and that peso_amount reconciles. Pass whichever format you
+work from:
 
     python3 validate_format.py --submission my_findings.json --estate my_estate.db
+    python3 validate_format.py --submission my_findings.json --estate-zip estate_csv.zip
 
 Stdlib only. Exits non-zero if the format is invalid.
 """
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import sqlite3
 import sys
+import zipfile
 from pathlib import Path
 
 SCHEME_TYPES = {"phantom_vendor", "kickback", "round_tripping",
@@ -200,11 +204,71 @@ def validate_against_estate(sub: dict, db_path: str) -> list[str]:
     return errs
 
 
+def validate_against_estate_zip(sub: dict, zip_path: str) -> list[str]:
+    """Confirm cited records exist and amounts reconcile against the estate ZIP."""
+    errs: list[str] = []
+
+    tables: dict[str, dict[str, dict]] = {}
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            for table in SOURCE_TABLES:
+                name = f"{table}.csv"
+                if name not in zf.namelist():
+                    errs.append(f"estate-zip: missing {name}")
+                    continue
+                id_col = ID_COLUMN[table]
+                raw = zf.read(name).decode("utf-8")
+                reader = csv.DictReader(io.StringIO(raw))
+                tables[table] = {row[id_col]: row for row in reader if id_col in row}
+    except zipfile.BadZipFile:
+        errs.append(f"{zip_path} is not a valid ZIP file")
+        return errs
+
+    for i, f in enumerate(sub.get("findings", [])):
+        per_table: dict[str, float] = {}
+        for j, ex in enumerate(f.get("exhibits", [])):
+            table, rid = ex.get("source_table"), str(ex.get("record_id", ""))
+            if table not in tables:
+                continue
+            row = tables[table].get(rid)
+            if row is None:
+                errs.append(f"findings[{i}].exhibits[{j}]: {table}.{rid} "
+                            f"does not exist in {zip_path}")
+                continue
+            amt_col = AMOUNT_COLUMN.get(table)
+            if amt_col and amt_col in row:
+                try:
+                    per_table[table] = per_table.get(table, 0.0) + float(row[amt_col] or 0)
+                except ValueError:
+                    pass
+
+        claimed = float(f.get("peso_amount", 0) or 0)
+        if per_table:
+            # Per-table, not summed across tables: an invoice and the transfer
+            # that settled it are the same pesos seen twice.
+            best = min(per_table.values(), key=lambda v: abs(claimed - v))
+            if abs(claimed - best) > PESO_TOLERANCE * max(best, 1):
+                detail = ", ".join(f"{t}={v:,.2f}" for t, v in sorted(per_table.items()))
+                errs.append(f"findings[{i}]: peso_amount {claimed:,.2f} does not reconcile "
+                            f"to cited exhibits [{detail}]")
+        else:
+            errs.append(f"findings[{i}]: no exhibit cites an amount-bearing table "
+                        f"({sorted(AMOUNT_COLUMN)}), so peso_amount cannot reconcile")
+
+    return errs
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--submission", required=True)
-    ap.add_argument("--estate", help="your own estate .db, to check exhibits resolve")
+    ap.add_argument("--estate", help="estate .db file, to check exhibits resolve")
+    ap.add_argument("--estate-zip", dest="estate_zip",
+                    help="estate_csv.zip, alternative to --estate")
     args = ap.parse_args()
+
+    if args.estate and args.estate_zip:
+        print("FAIL  pass --estate or --estate-zip, not both")
+        return 1
 
     try:
         sub = json.loads(Path(args.submission).read_text())
@@ -213,8 +277,13 @@ def main() -> int:
         return 1
 
     errs = validate_structure(sub)
+    estate_checked = "skipped"
     if args.estate:
         errs += validate_against_estate(sub, args.estate)
+        estate_checked = "yes (sqlite)"
+    elif args.estate_zip:
+        errs += validate_against_estate_zip(sub, args.estate_zip)
+        estate_checked = "yes (zip)"
 
     print()
     print("=" * 70)
@@ -223,7 +292,7 @@ def main() -> int:
     n_f = len(sub.get("findings", []))
     n_l = len(sub.get("leads_not_pursued", []))
     print(f"  findings: {n_f}   leads_not_pursued: {n_l}   "
-          f"estate check: {'yes' if args.estate else 'skipped'}")
+          f"estate check: {estate_checked}")
     print("-" * 70)
 
     if errs:

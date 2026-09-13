@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from forensic_auditor.api import app
 from forensic_auditor.data import centavos, load_files, load_zip
-from forensic_auditor.demo import generate
+from tools.legacy.demo import generate
 from forensic_auditor.engine import RULE, conclude, reconcile, trace_funds, validate_finding
 from forensic_auditor.investigation import Investigation, answer
 from forensic_auditor.reporting import printable

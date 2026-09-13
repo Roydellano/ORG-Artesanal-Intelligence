@@ -8,9 +8,9 @@ from pathlib import Path
 import random
 import zipfile
 
-from .data import load_zip
-from .demo import amount
-from .engine import reconcile
+from forensic_auditor.data import load_zip
+from tools.legacy.demo import amount
+from forensic_auditor.engine import reconcile
 
 
 def inject(content: bytes, seed: int) -> tuple[bytes, dict]:
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     if args.scheme == "excess" and not args.benign:
         content, truth = inject(args.dataset.read_bytes(), args.seed)
     else:
-        from .scenarios import inject_scenario
+        from tools.legacy.scenarios import inject_scenario
         content, truth = inject_scenario(args.dataset.read_bytes(), args.seed, args.scheme, args.benign)
     args.output.write_bytes(content)
     args.truth.write_text(json.dumps(truth, indent=2), encoding="utf-8")

@@ -5,17 +5,17 @@ from pathlib import Path
 import time
 import statistics
 
-from .data import load_zip
-from .demo import generate
-from .investigation import Investigation
+from forensic_auditor.data import load_zip
+from tools.legacy.demo import generate
+from forensic_auditor.investigation import Investigation
 
 
 def evaluate_extended(mode="offline"):
     """Exercise the public upload/export API; truth is held only by this evaluator."""
     from fastapi.testclient import TestClient
-    from .api import app
-    from .scenarios import generate_scenario
-    manifest = json.loads((Path(__file__).resolve().parents[1] / "tests/holdout_manifest.json").read_text())
+    from forensic_auditor.api import app
+    from tools.legacy.scenarios import generate_scenario
+    manifest = json.loads((Path(__file__).resolve().parents[2] / "tests/holdout_manifest.json").read_text())
     client = TestClient(app)
     records, runtimes, by_scheme = [], [], {}
     for seed in manifest["seeds"]:

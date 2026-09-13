@@ -6,8 +6,8 @@ import json
 import random
 import zipfile
 
-from .data import SCHEMAS, load_zip
-from .demo import generate, amount
+from forensic_auditor.data import SCHEMAS, load_zip
+from tools.legacy.demo import generate, amount
 
 SCENARIOS = ("all", "excess", "service", "return", "sale", "cycle")
 

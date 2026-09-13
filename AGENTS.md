@@ -2,7 +2,8 @@
 
 ## Scope and source of truth
 
-- The supplied student-materials pack is preserved in `specs/student-materials/` and supplements the brief with exact estate/submission formats, five scheme enums, offline replay, case-file structure and evaluation requirements. `docs/official_estates.md` describes the implemented SQLite path and its explicit documentary/semantic limits. The original CSV path remains separate; do not confuse its contracts or exports with the official judge format.
+- The supplied student-materials pack is preserved in `specs/student-materials/` and supplements the brief with exact estate/submission formats (SQLite or CSV ZIP), five scheme enums, offline replay, case-file structure and evaluation requirements. `docs/official_estates.md` describes the implemented official path, its records-based and documentary predicates, and its limits. The original CSV path remains separate; do not confuse its contracts or exports with the official judge format.
+- Generators, answer keys and evaluators belong in `tools/` (legacy ones in `tools/legacy/`), never in `forensic_auditor/`. Report held-out numbers only on `REPORTING_SEEDS` in `tools/official_evaluate.py`; if a defect is found on them, fix it, retire those seeds to development and freeze a new set.
 
 This file applies throughout this repository. Read it before making changes.
 
@@ -67,7 +68,7 @@ Implement a bounded investigation loop: form a hypothesis, choose a tool, inspec
 
 The following choices come from the implementation plan, not mandatory challenge tooling. Use them as the starting point and document justified changes in the plan:
 
-- Python with Pydantic contracts, NetworkX graph traversal, FastAPI, bare React/TypeScript/Vite UI (explicitly selected by the user), and pytest domain tests. SQLite provenance archival is optional via CLI; resumable investigation storage remains planned.
+- Python with Pydantic contracts, NetworkX graph traversal, FastAPI, bare React/TypeScript/Vite UI (explicitly selected by the user), and pytest domain tests. SQLite provenance archival is optional via CLI. Completed analyses can be saved to Tiger Data (PostgreSQL) through `forensic_auditor/storage.py` when `TIGER_DATABASE_URL` is set; store masked case views only, never original values or source bytes. Resumable investigation storage remains planned.
 - A single investigation controller using OpenRouter. The user has switched to Nemotron 3 Ultra free; default model ID: `nvidia/nemotron-3-ultra-550b-a55b:free`. Read OPENROUTER_API_KEY and OPENROUTER_MODEL from server-side .env configuration. Keep .env ignored by Git and keys out of browser code, logs, and exports. Free endpoints are restricted to app-generated fictional records because the selected endpoint logs use for product improvement; uploaded records require offline review or no-collection/ZDR routing. All model context uses the typed privacy projection. Validate structured responses locally; live latency remains a separate verification requirement.
 - CSV ingestion first; CFDI 4.0 XML ingestion after the initial end-to-end flow works.
 - Source-linked interactive case files and JSON/printable HTML exports. A dedicated PDF export is optional; the source document does not require the output to be a PDF.

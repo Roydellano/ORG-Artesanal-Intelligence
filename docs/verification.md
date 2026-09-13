@@ -1,5 +1,20 @@
 # Implementation verification — September 12, 2026
 
+## Records-based detection, CSV ZIP estates and seed rotation
+
+Changes: records-only predicates for all five schemes (no typed contract terms needed), per-finding challenger review, `proven`/`probable` confidence, `closed_by` on every lead, `estate_csv.zip` ingestion, company RFC/account inference, decision fingerprint, updated student-materials pack (validator `--estate-zip`), legacy answer-key modules moved to `tools/legacy/`.
+
+- Full suite: `.venv/Scripts/python.exe -m pytest -q` — 140 passed, 3 subtests. New tests cover records-only estates (all five found, no decoy accused, validator passes, no typed terms present), clean records estates, CSV ZIP = SQLite fingerprint plus `--estate-zip` validation, same-bank-code non-ownership, reimbursement references, replay with sockets disabled, and nullable ledger money.
+- Before this change, replacing typed contract JSON with prose on estate 710003 left only `revenue_inflation` detected. After it, the records predicates find all five on prose-only estates.
+- **First reporting run (now retired):** seeds 710003–750019, records style: 19/19 schemes, **1/50 decoys accused** (seed 750019: director-approved split orders treated as unapproved because that director never signed above the limit), peso amounts not reconciled for that seed. Typed style: 19/19, 0/50. A 20-seed sweep (900001–900020): 94/94, 0/200, one split cluster cut by an unrelated earlier order (seed 900013).
+- Both defects were fixed (senior approvers extended by job title; clustering on near-limit orders only). Those 25 seeds became development data and a new reporting set was frozen before running.
+- Development set after fixes (tuning + retired, 30 seeds): records 144/144, 0/300; typed 144/144, 0/300; all amounts reconcile.
+- **Reporting run, seeds 812007/823009/834011/845013/856017:** records 19/19 schemes, 0/50 decoys, all amounts reconcile, company inferred correctly, reruns identical, CSV ZIP identical; typed 19/19, 0/50. Offline: 0 LLM calls, MXN 0, 0.18 s total investigation time for five records estates. Output: `tmp/official-evaluation/results.md`.
+- CLI end-to-end on a generated `estate_csv.zip` without `--company-rfc`: company inferred, five findings, the supplied validator with `--estate-zip` passed, and replay reproduced the HTML byte-for-byte.
+- Not done: the frontend was not rebuilt because Node.js is not on PATH in this environment; `web/dist` predates the `.zip` upload and optional-RFC changes in `web/src/OfficialEstate.tsx`. Run `npm --prefix web run build` before demoing the UI. No live model call or timed human rehearsal was performed.
+
+All estates come from this project's generator, written alongside the detectors. These results show behaviour on the modeled patterns and decoys, not accuracy on the judges' estates.
+
 ## Official student-materials increment
 
 - Full suite: ` .venv/Scripts/python.exe -m pytest -q` — 116 tests and 3 subtests passed. Two existing Starlette/httpx deprecation warnings remain.

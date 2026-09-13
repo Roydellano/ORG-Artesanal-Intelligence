@@ -1,17 +1,18 @@
 # The Forensic Auditor
 
-**Student-materials support:** the Overview now includes the official eight-table SQLite estate workflow, all five scheme enums with narrow corroborated predicates, judge JSON, standalone diagram-rich HTML, masked/original evidence views, saved-case Q&A, and completed-run replay. See [official estate setup and limits](docs/official_estates.md). The existing ZIP/CSV workspace remains available. Original judge JSON must be exported with local identity reveal; masked aliases do not resolve against the original estate.
+**Student-materials support:** the official workflow reads the judges' estate as `estate.db` **or** `estate_csv.zip`, infers the audited company when not given, and detects all five scheme types from the eight official tables alone (SAT 69-B list, exact CLABE ownership, dated bank paths, inferred approval tiers, CFDI status/payment method, collections). Every finding records the challenger arguments it survived and is `proven` or `probable`; every declined lead names its closer. Output: judge JSON, standalone diagram-rich HTML, masked/original views, saved-case Q&A, decision fingerprint and network-free replay. See [official estate workflow, predicates and limits](docs/official_estates.md) and [pitch facts](docs/pitch_facts.md).
 
 Quick official-format verification:
 
 ```powershell
-.\.venv\Scripts\python.exe -m tools.official_generate --seed 101 --estate tmp\estate.db --answer-key tmp\evaluator-only\answer-key.json
-.\.venv\Scripts\python.exe -m forensic_auditor.official run tmp\estate.db --seed 101 --company-rfc EMP920101AB1 --output tmp\judge-case
-.\.venv\Scripts\python.exe specs\student-materials\forensic-auditor\validate_format.py --submission tmp\judge-case.json --estate tmp\estate.db
+.\.venv\Scripts\python.exe -m tools.official_generate --seed 4242 --estate tmp\estate.db --csv-zip tmp\estate_csv.zip --answer-key tmp\evaluator-only\answer-key.json
+.\.venv\Scripts\python.exe -m forensic_auditor.official run tmp\estate_csv.zip --seed 4242 --output tmp\judge-case
+.\.venv\Scripts\python.exe specs\student-materials\forensic-auditor\validate_format.py --submission tmp\judge-case.json --estate-zip tmp\estate_csv.zip
+.\.venv\Scripts\python.exe -m forensic_auditor.official replay tmp\judge-case.replay.zip --output tmp\replayed-case
 .\.venv\Scripts\python.exe -m tools.official_evaluate --output tmp\official-evaluation
 ```
 
-The official SQLite path requires Python 3.11+ with SQLite deserialization support. Five supported scheme names do not imply universal detection: unknown accounting semantics, missing ownership and unrecognized contract prose remain explicit gaps. Live AI scheduling and provider cost capture are implemented with masked context and safe failure, but authenticated live latency/billing and the timed human demo still need verification.
+Requires Python 3.11+ with SQLite deserialization support. Detection thresholds are constants in `forensic_auditor/official/audit.py`. Held-out results come from this project's own generator; they are not evidence of accuracy on the judges' estates. Live AI scheduling and provider cost capture are implemented with masked context and safe failure, but authenticated live latency/billing and the timed human demo still need verification.
 
 HackMTY 2026 Infosys forensic investigation project. See [AGENTS.md](AGENTS.md) for project rules and [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the roadmap.
 
@@ -40,6 +41,15 @@ npm --prefix web run dev
 Open the printed Vite URL (normally http://127.0.0.1:5173). Vite proxies `/api` to port 8000. API docs: http://127.0.0.1:8000/docs.
 
 On Windows, after installing dependencies, double-click `restart-servers.bat` to restart the API (8000) and Vite (5173) in the background. Open http://127.0.0.1:5173 for the current frontend; logs are in `tmp/servers/`. The launcher uses `scripts/restart-servers.ps1`, checks readiness, and refuses to stop a port owner it cannot identify as this project's server. Restarting the API clears in-memory datasets and investigations. This development shortcut does not rebuild the static frontend served on port 8000.
+
+## Saving analyses to Tiger Data (optional)
+
+1. Create a service in [Tiger Cloud](https://console.cloud.timescale.com/) and copy its connection string.
+2. Add it to your local `.env` as `TIGER_DATABASE_URL=postgres://tsdbadmin:...@....tsdb.cloud.timescale.com:5432/tsdb?sslmode=require`, run `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`, and restart the API.
+
+The `analyses` table is created on first use. Every finished CSV investigation and official estate run is saved as a **masked** case file with its status, mode, finding count, totals and dataset SHA-256. Browse, download or delete them in **Saved analyses**, or use `GET /api/analyses`, `GET /api/analyses/{id}` and `DELETE /api/analyses/{id}`. Original values, uploaded files and replay bundles are not stored, so a saved analysis cannot reveal sources or answer new questions. See [privacy and models](docs/privacy_and_models.md#tiger-data-archive) for what masking does and does not hide. Without the variable, nothing is saved.
+
+To test against a real service: set `TIGER_TEST_DATABASE_URL` and run `.\.venv\Scripts\python.exe -m pytest tests\test_storage.py`.
 
 ## AI configuration
 
@@ -103,8 +113,9 @@ The controller calls `chat` with a shorter timeout and locally validates JSON ac
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m forensic_auditor.evaluate --output tmp/holdout-evaluation.json
-.\.venv\Scripts\python.exe -m forensic_auditor.evaluate --extended --output tmp/extended-evaluation.json
+.\.venv\Scripts\python.exe -m tools.official_evaluate --output tmp/official-evaluation
+.\.venv\Scripts\python.exe -m tools.legacy.evaluate --output tmp/holdout-evaluation.json
+.\.venv\Scripts\python.exe -m tools.legacy.evaluate --extended --output tmp/extended-evaluation.json
 npm --prefix web test
 npm --prefix web run build
 ```

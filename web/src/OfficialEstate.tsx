@@ -42,8 +42,8 @@ export default function OfficialEstate() {
   }, [sid, reveal]);
   async function upload(file: File | undefined, replay = false) {
     if (!file) return;
-    if (!replay && (!company.trim() || !/^\d+$/.test(seed))) {
-      setError('Enter the estate seed and audited company RFC before uploading.'); return;
+    if (!replay && !/^\d+$/.test(seed)) {
+      setError('Enter the estate seed before uploading.'); return;
     }
     setBusy(true); setError(''); setAnswer(null); setSource(null);
     try {
@@ -52,6 +52,7 @@ export default function OfficialEstate() {
       const form = new FormData(); form.append('file', file);
       const result = await call(replay ? '/replay' : `/upload?seed=${encodeURIComponent(seed)}&company_rfc=${encodeURIComponent(company.trim())}`, { method: 'POST', body: form });
       setCoverage(result.coverage); setSid(result.session_id); setCase({ status: result.status }); setReveal(false);
+      if (result.company_rfc) setCompany(result.company_rfc);
     } catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   }
@@ -68,14 +69,14 @@ export default function OfficialEstate() {
   const complete = Array.isArray(caseFile.findings);
   const url = (kind: string, original = reveal) => `/api/estates/${sid}/export/${kind}?reveal=${original}`;
   return <section className="official-estate">
-    <h2>Judge estate · official SQLite format</h2>
-    <p>Upload the eight-table estate from the student materials. Choose deterministic offline review or masked AI tool scheduling. Saved cases replay without a network call.</p>
+    <h2>Judge estate · official estate.db or estate_csv.zip</h2>
+    <p>Upload the eight-table estate from the student materials as SQLite or the CSV ZIP. Leave the company RFC empty to infer it from invoices. Choose deterministic offline review or masked AI tool scheduling. Saved cases replay without a network call.</p>
     <div className="official-controls">
       <label>Estate seed <input aria-label="Official estate seed" value={seed} onChange={e => setSeed(e.target.value)} disabled={busy || running}/></label>
-      <label>Audited company RFC <input aria-label="Audited company RFC" value={company} placeholder="RFC from your estate" onChange={e => setCompany(e.target.value)} disabled={busy || running}/></label>
+      <label>Audited company RFC <input aria-label="Audited company RFC" value={company} placeholder="Optional · inferred from invoices" onChange={e => setCompany(e.target.value)} disabled={busy || running}/></label>
       <label>Review mode <select aria-label="Official review mode" value={mode} onChange={e => setMode(e.target.value)} disabled={busy || running}><option value="offline">Offline evidence review</option><option value="ai">AI · eligible non-free model</option></select></label>
       {mode === 'ai' && <><label>USD/MXN rate <input value={rate} onChange={e => setRate(e.target.value)} placeholder="Supplied rate"/></label><label>Rate source/date <input value={fxSource} onChange={e => setFxSource(e.target.value)} placeholder="Source and quoted date"/></label><small>Uses your configured eligible model. Uploaded estates cannot use the free endpoint. Provider usage cost and your supplied exchange rate determine MXN cost.</small></>}
-      <label className="official-upload">Upload estate .db <input aria-label="Upload official SQLite estate" type="file" accept=".db,.sqlite,.sqlite3" disabled={busy || running} onChange={e => { upload(e.target.files?.[0]); e.target.value = ''; }}/></label>
+      <label className="official-upload">Upload estate .db or .zip <input aria-label="Upload official estate" type="file" accept=".db,.sqlite,.sqlite3,.zip" disabled={busy || running} onChange={e => { upload(e.target.files?.[0]); e.target.value = ''; }}/></label>
       <label className="official-upload">Replay completed run <input aria-label="Upload completed replay" type="file" accept=".zip" disabled={busy || running} onChange={e => { upload(e.target.files?.[0], true); e.target.value = ''; }}/></label>
     </div>
     {error && <p role="alert">{error}</p>}

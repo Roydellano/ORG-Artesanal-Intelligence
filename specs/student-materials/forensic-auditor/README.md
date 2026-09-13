@@ -16,13 +16,38 @@ This folder specifies the **formats** your project must produce and consume, and
 | `validate_format.py` | Checks your output conforms. Structure only; no answer key, no scoring. |
 | `results_table_template.csv` | The Results table shape |
 
+## Estate format — SQLite or CSV, your choice
+
+Judges hand you the same estate in two interchangeable forms. Pick whichever your system reads; declare the choice in your pitch and judges will use that form for evaluation. Both carry identical data and identical column names.
+
+**`estate.db`** — a SQLite database. Queryable with any SQLite library. Table and column names are defined in `estate_schema.sql`.
+
+**`estate_csv.zip`** — a ZIP containing eight UTF-8 CSV files, one per table, each with a header row matching `estate_schema.sql`:
+
+```
+estate_csv.zip
+  vendors.csv
+  invoices.csv
+  ledger.csv
+  bank_txns.csv
+  purchase_orders.csv
+  contracts.csv
+  employees.csv
+  efos_list.csv
+```
+
+Load these with pandas `read_csv`, the standard `csv` module, or anything else — no SQL required.
+
+Your system must accept the estate path at run time. Hardcoded paths fail.
+
 ## Using the validator
 
 ```bash
 python3 validate_format.py --submission my_findings.json
 
-# also confirm cited exhibits resolve against your own estate
+# also confirm cited exhibits resolve against your estate
 python3 validate_format.py --submission my_findings.json --estate my_estate.db
+python3 validate_format.py --submission my_findings.json --estate-zip estate_csv.zip
 ```
 
 Exits non-zero on a format error. Wire it into your build.

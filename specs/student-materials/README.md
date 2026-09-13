@@ -77,8 +77,8 @@ student-materials/
 Each track folder has its own README. **Read that next.**
 
 ```bash
-cd courier          && python3 validate_format.py --event-log event_log_example.jsonl
-cd forensic-auditor && python3 validate_format.py --submission submission_example.json
+(cd courier && python3 validate_format.py --event-log event_log_example.jsonl)
+(cd forensic-auditor && python3 validate_format.py --submission submission_example.json)
 ```
 
 Both validators are stdlib-only Python 3 — no install step — and exit non-zero on a format error, so you can wire them into your build.

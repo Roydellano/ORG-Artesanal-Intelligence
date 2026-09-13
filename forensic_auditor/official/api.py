@@ -9,10 +9,11 @@ from fastapi import APIRouter, HTTPException, UploadFile, Query
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
-from .estate import load
+from .estate import load_any, infer_company
 from .audit import investigate
 from .report import answer, bundle, canonical, masked, render, replay, validate_publication
 from ..qa import explain
+from .. import storage
 from openrouter_client import OpenRouterError
 
 router = APIRouter(prefix='/api/estates', tags=['Official student-materials'])
@@ -38,14 +39,15 @@ def register(estate, seed, company, case=None):
         sessions[sid] = {'estate': estate, 'seed': seed, 'company': company, 'case': case,
                          'cancel': threading.Event(), 'status': case['status'] if case else 'ready'}
     return {'session_id': sid, 'coverage': {t: len(r) for t, r in estate.rows.items()}, 'estate_sha256': estate.identity,
-            'status': sessions[sid]['status']}
+            'company_rfc': company, 'status': sessions[sid]['status']}
 
 
 @router.post('/upload')
-async def upload(file: UploadFile, seed: int = Query(ge=0), company_rfc: str = Query(min_length=1, max_length=100)):
+async def upload(file: UploadFile, seed: int = Query(ge=0), company_rfc: str = Query(default='', max_length=100)):
     try:
         content = await file.read(20_000_001)
-        return register(load(content), seed, company_rfc)
+        estate = load_any(content)
+        return register(estate, seed, company_rfc.strip() or infer_company(estate))
     except ValueError as error:
         raise HTTPException(422, str(error)) from None
     finally:
@@ -100,6 +102,7 @@ def start(identity: str, mode: Literal['offline', 'ai'] = 'offline', usd_mxn_rat
             with guard:
                 item['case'] = result
                 item['status'] = result['status']
+            storage.archive('official', masked(item['estate'], result))
         except Exception:
             with guard:
                 item['status'] = 'failed'

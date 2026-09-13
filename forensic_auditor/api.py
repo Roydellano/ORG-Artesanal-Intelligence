@@ -6,7 +6,7 @@ import threading
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,6 +18,7 @@ from .reporting import export_case, printable
 from .privacy import Presentation
 from .qa import explain
 from .voice import signed_session, VoiceError
+from . import storage
 from openrouter_client import public_settings, chat, OpenRouterError
 
 app = FastAPI(title="The Forensic Auditor", version="0.1.0")
@@ -161,10 +162,15 @@ def start(session_id: str, body: StartRequest):
                 job.run()
             finally:
                 with guard:
-                    if session.get("deleting"):
+                    deleting = session.get("deleting")
+                    if deleting:
                         job.cache.clear()
                         job.projection.clear()
                         sessions.pop(session_id, None)
+                    snapshot = job.snapshot()
+                    saved = None if deleting or snapshot["status"] in ("queued", "running") else session["presentation"].apply(snapshot)
+                if saved is not None:
+                    storage.archive("csv", saved, synthetic=session["synthetic"])
         pool.submit(execute)
     return session["presentation"].apply(job.snapshot())
 
@@ -280,6 +286,42 @@ def export(session_id: str, kind: Literal["json", "html"], full: bool = False):
     if kind == "html":
         return HTMLResponse(printable(session["data"], case, full=full, presentation=session["presentation"]), headers={"Content-Disposition": 'attachment; filename="case-file.html"'})
     return export_case(session["data"], case, full=full, presentation=session["presentation"])
+
+
+@app.get("/api/analyses")
+def saved_analyses(limit: int = Query(default=50, ge=1, le=200), dataset_sha256: str | None = Query(default=None, max_length=64)):
+    if not storage.enabled():
+        return {**storage.status(), "items": []}
+    try:
+        return {**storage.status(), "items": storage.list_analyses(limit, dataset_sha256)}
+    except storage.StorageError as error:
+        raise HTTPException(502, str(error)) from None
+
+
+@app.get("/api/analyses/{analysis_id}")
+def saved_analysis(analysis_id: str):
+    try:
+        row = storage.get_analysis(analysis_id)
+    except ValueError:
+        raise HTTPException(422, "Invalid analysis ID.") from None
+    except storage.StorageError as error:
+        raise HTTPException(502, str(error)) from None
+    if row is None:
+        raise HTTPException(404, "Saved analysis not found.")
+    return row
+
+
+@app.delete("/api/analyses/{analysis_id}")
+def delete_saved_analysis(analysis_id: str):
+    try:
+        deleted = storage.delete_analysis(analysis_id)
+    except ValueError:
+        raise HTTPException(422, "Invalid analysis ID.") from None
+    except storage.StorageError as error:
+        raise HTTPException(502, str(error)) from None
+    if not deleted:
+        raise HTTPException(404, "Saved analysis not found.")
+    return {"status": "deleted"}
 
 
 DIST = Path(__file__).resolve().parents[1] / "web" / "dist"

@@ -7,7 +7,7 @@ from pathlib import Path
 import random
 import zipfile
 
-from .data import SCHEMAS
+from forensic_auditor.data import SCHEMAS
 
 
 def amount(value: int) -> str:
