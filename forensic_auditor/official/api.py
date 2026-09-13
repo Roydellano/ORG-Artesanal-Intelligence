@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 from .estate import load
 from .audit import investigate
 from .report import answer, bundle, canonical, masked, render, replay, validate_publication
+from ..qa import explain
+from openrouter_client import OpenRouterError
 
 router = APIRouter(prefix='/api/estates', tags=['Official student-materials'])
 sessions = OrderedDict()
@@ -153,6 +155,7 @@ def evidence(identity: str, table: str, record_id: str, reveal: bool = False):
 
 class Question(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
+    mode: Literal['ai', 'offline'] = 'ai'
 
 
 @router.post('/{identity}/ask')
@@ -160,8 +163,20 @@ def ask(identity: str, body: Question, reveal: bool = False):
     item = session(identity)
     if not item['case']:
         raise HTTPException(409, 'Run the investigation first')
-    case = item['case'] if reveal else masked(item['estate'], item['case'])
-    return answer(case, body.question)
+    if body.mode == 'offline':
+        case = item['case'] if reveal else masked(item['estate'], item['case'])
+        return answer(case, body.question)
+    estate = item['estate']
+    def mask(value):
+        return masked(estate, {'value': value})['value']
+    refs = [f'{table}:{rid}' for table, rows in estate.rows.items() for rid in rows]
+    try:
+        result = explain(item['case'], body.question, refs, mask=mask,
+                         history=item.get('qa_history', []))
+    except OpenRouterError as error:
+        raise HTTPException(502, str(error)) from None
+    item['qa_history'] = (item.get('qa_history', []) + [result.pop('_history')])[-6:]
+    return mask(result)
 
 
 @router.delete('/{identity}')

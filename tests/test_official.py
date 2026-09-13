@@ -176,7 +176,7 @@ def test_api_upload_case_original_export_replay_and_question(estate):
         output = client.get(base + '/export/json?reveal=true').json()
         assert not VALIDATOR['validate_structure'](output)
         lead = case['leads_not_pursued'][0]
-        reply = client.post(base + '/ask?reveal=true', json={'question': 'Why declined ' + lead['lead_id']}).json()
+        reply = client.post(base + '/ask?reveal=true', json={'question': 'Why declined ' + lead['lead_id'], 'mode': 'offline'}).json()
         assert lead['reason'] in reply['answer']
         archive = client.get(base + '/export/replay?reveal=true')
         restored = client.post('/api/estates/replay', files={'file': ('case.zip', archive.content)})

@@ -7,7 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 POLICY = "projection-v1"
-TOOL_NAMES = {"lookup_supplier", "reconcile", "check_support", "trace_funds", "test_alternative", "conclude"}
+TOOL_NAMES = {"inspect_evidence", "lookup_supplier", "reconcile", "check_support", "trace_funds", "test_alternative", "conclude"}
 KINDS = {"invoice", "service", "flow", "return", "sale"}
 
 

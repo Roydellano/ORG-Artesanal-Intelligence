@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import AuditorMarkdown from './AuditorMarkdown';
 
 type Json = Record<string, any>;
 async function call(path: string, init?: RequestInit) {
@@ -22,6 +23,8 @@ export default function OfficialEstate() {
   const [reveal, setReveal] = useState(false);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<Json | null>(null);
+  const [answerMode, setAnswerMode] = useState('ai');
+  const [asking, setAsking] = useState(false);
   const [source, setSource] = useState<Json | null>(null);
   const generation = useRef(0);
   useEffect(() => {
@@ -102,10 +105,12 @@ export default function OfficialEstate() {
           {source && <pre>{JSON.stringify(source, null, 2)}</pre>}
         </details>}
         <form onSubmit={async e => { e.preventDefault(); setError(''); const current = generation.current;
-          try { const result = await call(`/${sid}/ask?reveal=${reveal}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) }); if (current === generation.current) setAnswer(result); }
+          setAsking(true);
+          try { const result = await call(`/${sid}/ask?reveal=${reveal}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, mode: answerMode }) }); if (current === generation.current) setAnswer(result); }
           catch (err) { setError(String(err)); }
-        }}><label>Ask the saved case <input aria-label="Ask official case" value={question} onChange={e => setQuestion(e.target.value)} placeholder="Why was L0004 declined?" required maxLength={1000}/></label><button>Ask auditor</button></form>
-        {answer && <div role="status"><p>{answer.answer}</p><small>{answer.evidence.join(' · ')}</small></div>}
+          finally { setAsking(false); }
+        }}><label>Answer mode <select value={answerMode} onChange={e => setAnswerMode(e.target.value)}><option value="ai">AI auditor</option><option value="offline">Offline case extraction</option></select></label><label>Ask the auditor <input aria-label="Ask official case" value={question} onChange={e => setQuestion(e.target.value)} placeholder="Why was L0004 declined?" required maxLength={1000}/></label><button disabled={asking}>{asking ? 'Reviewing case…' : 'Ask auditor'}</button></form>
+        {answer && <div role="status"><AuditorMarkdown>{answer.answer}</AuditorMarkdown><small>{answer.evidence.join(' · ')}</small></div>}
       </>}
     </>}
   </section>;

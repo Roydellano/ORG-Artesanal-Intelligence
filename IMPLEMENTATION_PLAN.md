@@ -1,5 +1,9 @@
 # Forensic Auditor implementation plan
 
+## Conversational case Q&A — September 12 update
+
+Ask the Auditor now defaults to OpenRouter-backed conversation in CSV and official views. A separate masked case projection includes findings, exact supplied calculations, evidence trails, alternatives, lead dispositions and investigation logs; six successful exchanges provide conversational continuity. Source originals and unrestricted document fields are excluded. Unknown/cross-case citations and malformed responses are rejected, context has a hard size bound, and failures never silently switch modes. Existing free-demo/ZDR-upload restrictions remain. Offline extraction is explicitly selectable. Generated prose does not change deterministic findings, and reference validation does not establish semantic correctness. Authenticated live Q&A latency remains unverified.
+
 ## Student-materials delivery — authoritative contract update
 
 The September 12 student-materials pack is now preserved verbatim in `specs/student-materials/`. It supplements the original brief with exact input/output and judging requirements. This section supersedes earlier compatibility and completion claims. Preserve the existing CSV workflow while adding an official SQLite workflow; never reinterpret a full double-entry ledger as the old obligation subledger.
@@ -338,3 +342,7 @@ Implement the first vertical slice in this order: seeded duplicate-payment datas
 
 Before implementing the XML adapter, retrieve the official CFDI 4.0 schema and define the supported document subset explicitly. The user-selected OpenRouter integration requires an API key, available credit, and network access. The key must stay server-side and out of version control. The original challenge brief is preserved unchanged.
 
+
+### September 12 latency correction
+
+The CSV controller now prefers one bundled local evidence inspection per lead, then separate model-selected alternative testing and conclusion. Up to twelve independent lead actions share a call. Each underlying check retains its evidence retrieval and timeline entry; publication still requires the deterministic gate. The default CSV run budget is 180 seconds, with zero automatic retries. AI resume retains validated unexecuted actions. Live provider latency remains unverified.

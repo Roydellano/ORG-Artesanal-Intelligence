@@ -300,7 +300,7 @@ def test_fresh_zip_through_public_api_to_export_and_question():
             for ref in finding["evidence"]:
                 assert client.get(f"{prefix}/evidence", params={"ref": ref}).status_code == 200
         assert client.get(f"{prefix}/evidence", params={"ref": "bank:invented"}).status_code == 404
-        result = client.post(f"{prefix}/ask", json={"question": "How was the total calculated?"}).json()
+        result = client.post(f"{prefix}/ask", json={"question": "How was the total calculated?", "mode": "offline"}).json()
         assert result["evidence"]
         assert "centavos" in result["answer"]
         assert "text/html" in client.get(f"{prefix}/export/html").headers["content-type"]
@@ -396,3 +396,69 @@ def test_api_investigate_resume_endpoint():
         time.sleep(0.05)
     assert case["status"] == "offline_complete"
 
+
+def test_batched_inspection_reduces_round_trips_without_skipping_evidence():
+    data, truth = demo(7321)
+    calls = []
+    def batched(messages, **kwargs):
+        context = json.loads(messages[1]['content'])
+        calls.append(context)
+        return json.dumps({'actions': [
+            {'lead_id': lead['id'], 'tool': lead['available_tools'][0]}
+            for lead in context['leads'][:12]
+        ]})
+    case = run(data, mode='ai', model_chat=batched)
+    assert case['status'] == 'complete'
+    assert case['totals']['MXN'] == truth['expected_excess_centavos']
+    assert len(calls) <= 3
+    for finding in case['findings']:
+        lead = next(l for l in case['leads'] if l['subject_id'] == finding['invoice_id'])
+        tools = [e['tool'] for e in case['timeline'] if e['lead_id'] == lead['id']]
+        assert tools.index('reconcile') < tools.index('test_alternative') < tools.index('conclude')
+        assert 'check_support' in tools
+
+
+def test_bundled_checks_respect_step_budget_and_resume_offline():
+    data, truth = demo()
+    def batched(messages, **kwargs):
+        context = json.loads(messages[1]['content'])
+        return json.dumps({'actions': [
+            {'lead_id': lead['id'], 'tool': 'inspect_evidence'}
+            for lead in context['leads'][:12]
+        ]})
+    job = Investigation(data, mode='ai', max_steps=1, model_chat=batched)
+    job.run()
+    assert job.snapshot()['status'] == 'incomplete'
+    assert len(job.seen) == 1
+    assert not job.snapshot()['findings']
+    job.prepare_resume('offline', max_steps=60)
+    job.run()
+    assert job.snapshot()['status'] == 'offline_complete'
+    assert job.snapshot()['totals']['MXN'] == truth['expected_excess_centavos']
+
+
+def test_ai_resume_preserves_validated_actions_after_deadline(monkeypatch):
+    import forensic_auditor.investigation as controller
+    data, _ = demo()
+    clock = [0.0]
+    monkeypatch.setattr(controller.time, 'monotonic', lambda: clock[0])
+    calls = []
+    def batched(messages, **kwargs):
+        context = json.loads(messages[1]['content'])
+        calls.append(context)
+        if len(calls) == 1:
+            clock[0] = 181.0
+        return json.dumps({'actions': [
+            {'lead_id': lead['id'], 'tool': lead['available_tools'][0]}
+            for lead in context['leads'][:12]
+        ]})
+    job = Investigation(data, mode='ai', model_chat=batched)
+    job.run()
+    assert job.snapshot()['status'] == 'incomplete'
+    queued = list(job.actions)
+    assert queued
+    job.prepare_resume('ai', seconds=180)
+    assert job.actions == queued
+    job.run()
+    assert job.snapshot()['status'] == 'complete'
+    assert len(calls) <= 3

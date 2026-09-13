@@ -16,6 +16,7 @@ from .synthetic_records import records as demo_records
 from .investigation import Investigation, answer
 from .reporting import export_case, printable
 from .privacy import Presentation
+from .qa import explain
 from openrouter_client import public_settings, chat, OpenRouterError
 
 app = FastAPI(title="The Forensic Auditor", version="0.1.0")
@@ -49,11 +50,12 @@ class StartRequest(StrictRequest):
     mode: Literal["offline", "ai"] = "offline"
     resume: bool = False
     max_steps: int = Field(default=60, ge=1, le=120)
-    seconds: int = Field(default=90, ge=5, le=300)
+    seconds: int = Field(default=180, ge=5, le=300)
 
 
 class QuestionRequest(StrictRequest):
     question: str = Field(min_length=1, max_length=1000)
+    mode: Literal["ai", "offline"] = "ai"
 
 
 def get_session(session_id: str):
@@ -151,6 +153,8 @@ def start(session_id: str, body: StartRequest):
         else:
             job = Investigation(session["data"], body.mode, body.max_steps, body.seconds, synthetic=session["synthetic"])
         session["job"] = job
+        if not body.resume:
+            session.pop("qa_history", None)
         def execute():
             try:
                 job.run()
@@ -228,7 +232,17 @@ def ask(session_id: str, body: QuestionRequest):
     question = body.question
     for alias, original in session["presentation"].reverse.items():
         question = question.replace(alias, original)
-    result = answer(case, question)
+    if body.mode == "ai":
+        try:
+            result = explain(case, body.question, session["data"].evidence,
+                             mask=session["presentation"].apply, synthetic=session["synthetic"],
+                             history=session.get("qa_history", []))
+        except OpenRouterError as error:
+            raise HTTPException(502, str(error)) from None
+        turn = result.pop("_history")
+        session["qa_history"] = (session.get("qa_history", []) + [turn])[-6:]
+    else:
+        result = answer(case, question)
     session["data"].retrieve(result["evidence"])
     session["job"].event("case", "answer_question", {"question": body.question, **result})
     return session["presentation"].apply(result)

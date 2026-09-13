@@ -43,6 +43,10 @@ On Windows, after installing dependencies, double-click `restart-servers.bat` to
 
 ## AI configuration
 
+Auditor answers render Markdown in both case views, including emphasis, nested lists, tables, quotes and code blocks. Raw HTML and automatic remote images are disabled; evidence citation controls remain separate.
+
+**Ask the Auditor** defaults to conversational AI in both case views, independently of investigation mode. It receives masked findings, calculations, money trails, lead dispositions and recorded checks, plus the last six successful exchanges. Known dataset identities and common contact/RFC/account patterns in questions are masked; do not add new confidential details. Citations must resolve to evidence in the current case. Explanations do not modify validated findings; citation existence does not guarantee prose correctness. Provider failures are displayed explicitly. Select **Offline case extraction** for network-free answers. Uploaded records still require a non-free model with no-collection/ZDR routing. Oversized context fails explicitly. The narrower controller projection described below applies to investigation scheduling, not conversational Q&A.
+
 Create `.env` from `.env.example` if it does not already exist. Keep an existing `.env`; do not overwrite your key. Fill it in:
 
 ```dotenv
@@ -55,7 +59,7 @@ OPENROUTER_REASONING=off
 
 Use the exact provider model ID including `:free`. System environment variables override `.env`. The Overview page shows the effective model and whether a server key exists; it never returns the key. Configuration is read on new requests. Restart an old running backend after updating the code, and rebuild the frontend. `/api/config` and the **Check model connection** button provide sanitized diagnostics.
 
-Only typed pseudonymous summaries cross the model boundary: random session/lead aliases, lead type, permitted/completed actions, evidence/missing counts, and a verified-predicate boolean. Raw records, names, RFCs, accounts, descriptions, references, URLs, notes and user questions are excluded. Amount calculations and identity joins remain local. Responses must be locally valid JSON actions; one fenced JSON document is accepted, arbitrary prose is not. Up to six independent lead actions can be returned per call. Defaults: 60 tool steps, 90 seconds, 40 seconds per model request, 2048 output tokens, zero automatic retries. Cancellation stops before the next action and interrupts discovery; a remote request can finish its configured timeout.
+Only typed pseudonymous summaries cross the model boundary: random session/lead aliases, lead type, permitted/completed actions, evidence/missing counts, and a verified-predicate boolean. Raw records, names, RFCs, accounts, descriptions, references, URLs, notes and user questions are excluded. Amount calculations and identity joins remain local. Responses must be locally valid JSON actions; one fenced JSON document is accepted, arbitrary prose is not. Up to twelve independent lead actions can be returned per call. Defaults: 60 tool steps, 180 seconds, 40 seconds per model request, 2048 output tokens, zero automatic retries. Cancellation stops before the next action and interrupts discovery; a remote request can finish its configured timeout.
 
 The old 250-token response limit could truncate a reasoning model before its JSON action. Reasoning is now disabled by default and excluded from returned output. No `response_format` is forced because this free endpoint does not support it. HTTP 401/403/404/429, token truncation, invalid responses and timeouts have controlled, actionable messages. No provider error body or private reasoning is displayed. Model availability and rate limits still depend on OpenRouter/NVIDIA.
 
@@ -117,3 +121,5 @@ node web/node_modules/vite/bin/vite.js build web
 ```
 
 The pnpm workspace explicitly allows the standard esbuild install script. Vite's subprocess may need local sandbox permission. See [privacy and model controls](docs/privacy_and_models.md) for the current restrictions and diagnostics.
+
+AI latency: the CSV controller prefers bundled local evidence inspection, followed by separate alternative and conclusion decisions. It requests up to twelve distinct leads per call and preserves validated queued actions on AI resume. The 180-second default remains bounded; provider timeouts still leave an explicitly incomplete case.

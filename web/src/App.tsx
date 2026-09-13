@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { money } from "./money";
+import AuditorMarkdown from "./AuditorMarkdown";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -256,6 +257,7 @@ export default function App() {
   const [records, setRecords] = useState<Json>({ rows: [], total: 0 });
   const [question, setQuestion] = useState("");
   const [answers, setAnswers] = useState<Json[]>([]);
+  const [answerMode, setAnswerMode] = useState("ai");
   const fileInput = useRef<HTMLInputElement>(null);
   const sessionRef = useRef<string | null>(null);
   const closeEvidence = useRef<HTMLButtonElement>(null);
@@ -353,7 +355,7 @@ export default function App() {
       setView("Investigation");
     });
   }
-  async function resumeInvestigation(nextMode: string, seconds = 90) {
+  async function resumeInvestigation(nextMode: string, seconds = 180) {
     await perform(async () => {
       setCase(await post(`${base}/investigate`, { mode: nextMode, resume: true, seconds }));
       setMode(nextMode);
@@ -374,8 +376,10 @@ export default function App() {
   }
   async function ask(text = question) {
     if (!text.trim()) return;
+    const requestedSession = sessionRef.current;
     await perform(async () => {
-      const response = await post(`${base}/ask`, { question: text });
+      const response = await post(`${base}/ask`, { question: text, mode: answerMode });
+      if (requestedSession !== sessionRef.current) return;
       setAnswers((previous) => [...previous, { question: text, ...response }]);
       setQuestion("");
     });
@@ -544,14 +548,14 @@ export default function App() {
                   <button
                     className="primary"
                     disabled={busy || running}
-                    onClick={() => resumeInvestigation("ai", 120)}
-                    title="Grant 120 seconds to continue AI investigation"
+                    onClick={() => resumeInvestigation("ai", 180)}
+                    title="Grant 180 seconds to continue AI investigation"
                   >
-                    <Clock size={14} /> Continue with more time (+120s)
+                    <Clock size={14} /> Continue with more time (+180s)
                   </button>
                   <button
                     disabled={busy || running}
-                    onClick={() => resumeInvestigation("ai", 90)}
+                    onClick={() => resumeInvestigation("ai", 180)}
                     title="Retry connection and continue AI review"
                   >
                     <RotateCw size={14} /> {caseFile.error_type === "connection_error" ? "Retry connection" : "Continue AI review"}
@@ -756,7 +760,7 @@ export default function App() {
                   </div>
                   <p className="mode-note">
                     {mode === "ai"
-                      ? "AI receives pseudonymous lead summaries only. Up to 60 tool steps / 90 seconds. Free endpoints are available only for app-generated fictional demos."
+                      ? "AI receives pseudonymous lead summaries only. Up to 60 tool steps / 180 seconds. Free endpoints are available only for app-generated fictional demos."
                       : "Offline review is labeled separately from an AI investigation. Findings still require verified relationships and exact calculations."}
                   </p>
                   <p className="mode-note">Model: {configuration.model || "Not configured"}. {configuration.configured ? "Server key configured." : "Server API key is missing."}</p>
@@ -881,14 +885,14 @@ export default function App() {
                         <button
                           className="primary"
                           disabled={busy || running}
-                          onClick={() => resumeInvestigation("ai", 120)}
-                          title="Grant 120 seconds to continue AI investigation"
+                          onClick={() => resumeInvestigation("ai", 180)}
+                          title="Grant 180 seconds to continue AI investigation"
                         >
-                          <Clock size={13} /> Continue (+120s)
+                          <Clock size={13} /> Continue (+180s)
                         </button>
                         <button
                           disabled={busy || running}
-                          onClick={() => resumeInvestigation("ai", 90)}
+                          onClick={() => resumeInvestigation("ai", 180)}
                           title="Retry connection and continue AI review"
                         >
                           <RotateCw size={13} /> {caseFile.error_type === "connection_error" ? "Retry" : "Continue AI"}
@@ -1264,9 +1268,13 @@ export default function App() {
                     </span>
                     <h2>What would you like to verify?</h2>
                     <p>
-                      Answers use the current case. Unsupported questions stay
-                      unanswered.
+                      Chat with the AI using this case’s findings, calculations,
+                      evidence trails and investigation decisions.
                     </p>
+                    <label>Answer mode <select value={answerMode} onChange={e => setAnswerMode(e.target.value)} disabled={busy}>
+                      <option value="ai">AI auditor</option>
+                      <option value="offline">Offline case extraction</option>
+                    </select></label>
                     <div className="suggestions">
                       {[
                         "How was the total calculated?",
@@ -1290,9 +1298,9 @@ export default function App() {
                         <div className="question">{item.question}</div>
                         <div className="answer">
                           <span className="tiny-label">
-                            AUDITOR · CASE EXTRACTION
+                            {item.mode === "ai" ? "AUDITOR · AI" : "AUDITOR · OFFLINE EXTRACTION"}
                           </span>
-                          <p>{item.answer}</p>
+                          <AuditorMarkdown>{item.answer}</AuditorMarkdown>
                           <EvidenceLinks refs={item.evidence} />
                           <small>
                             Case status: {item.case_status.replaceAll("_", " ")}
@@ -1301,6 +1309,7 @@ export default function App() {
                       </div>
                     ))}
                   </div>
+                  {busy && <p role="status">The auditor is reviewing the case…</p>}
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
@@ -1329,10 +1338,11 @@ export default function App() {
                   <ShieldCheck size={25} />
                   <h3>A defensible answer has a source.</h3>
                   <p>
-                    This MVP extracts answers from validated case fields. It
-                    does not generate new accusations or speculate about missing
-                    facts.
+                    The AI receives masked case context and remembers your last
+                    six exchanges. Citations are checked against this dataset;
+                    generated explanations do not create or change findings.
                   </p>
+                  <p>Keep questions focused on the case; do not include new personal or confidential information. Uploaded data requires a model with private routing.</p>
                   <p>Inspect the linked records to review each answer.</p>
                 </aside>
               </div>

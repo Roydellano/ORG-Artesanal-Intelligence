@@ -17,13 +17,14 @@ from .data import Dataset
 from .engine import (LIMITATIONS, check_support, conclude, generate_leads,
                      lookup_supplier, reconcile, test_alternative, trace_funds)
 
-PROMPT_VERSION = "investigator-v2"
+PROMPT_VERSION = "investigator-v3"
 MIN_MODEL_SECONDS = 15
 TOOLS = {"lookup_supplier": lookup_supplier, "reconcile": reconcile,
          "check_support": check_support, "test_alternative": test_alternative, "trace_funds": trace_funds}
 SYSTEM = """You are a forensic investigation controller reviewing pseudonymous structured facts.
 Return only JSON: {"lead_id":"exact supplied alias","tool":"one available_tools entry"}.
-You may instead return {"actions":[...]} with up to 6 actions for DISTINCT leads to reduce latency.
+Prefer {"actions":[...]} with one action per pending lead, up to 12 DISTINCT leads per response.
+Prefer inspect_evidence to gather the required local checks together. Then test_alternative, then conclude.
 Use only the exact supplied lead aliases and each lead's available_tools. Never repeat completed tools.
 Inspect evidence before alternatives, and alternatives before conclude. Prioritize strong leads, then resolve uncertain leads.
 The deterministic evidence gate alone decides findings and amounts. Do not include prose or private reasoning.
@@ -33,11 +34,11 @@ The deterministic evidence gate alone decides findings and amounts. Do not inclu
 class Action(BaseModel):
     model_config = ConfigDict(extra="forbid")
     lead_id: str = Field(min_length=1, max_length=500)
-    tool: Literal["lookup_supplier", "reconcile", "check_support", "trace_funds", "test_alternative", "conclude"]
+    tool: Literal["inspect_evidence", "lookup_supplier", "reconcile", "check_support", "trace_funds", "test_alternative", "conclude"]
 
 
 class Investigation:
-    def __init__(self, data: Dataset, mode: str = "offline", max_steps: int = 60, seconds: float = 90, model_chat=chat, *, synthetic=False):
+    def __init__(self, data: Dataset, mode: str = "offline", max_steps: int = 60, seconds: float = 180, model_chat=chat, *, synthetic=False):
         self.data = data
         self.mode = mode
         self.max_steps = max_steps
@@ -86,7 +87,10 @@ class Investigation:
     def available(cls, lead, used):
         sequence = cls.sequence(lead)
         required = {"reconcile", "test_alternative"} if lead["kind"] == "invoice" else set(sequence[:-1])
-        return [tool for tool in sequence if tool not in used and (tool != "conclude" or required <= used)]
+        available = [tool for tool in sequence if tool not in used and (tool != "conclude" or required <= used)]
+        if any(tool not in used for tool in sequence if tool not in ("test_alternative", "conclude")):
+            available.insert(0, "inspect_evidence")
+        return available
 
     def run(self) -> None:
         started = time.monotonic()
@@ -106,6 +110,12 @@ class Investigation:
                 self.case["leads"] = leads
                 self.case["discovery"] = discovery
             for step in range(max(0, self.max_steps - len(seen))):
+                if len(seen) >= self.max_steps and any(lead["state"] in ("pending", "investigating") for lead in leads):
+                    with self.lock:
+                        self.case["error_type"] = "step_budget"
+                        self.case["can_resume"] = self.resume_count < 5
+                    self._finish("incomplete", "Step budget reached.")
+                    break
                 if self.cancelled.is_set():
                     self._finish("cancelled", "Cancelled by the reviewer.")
                     break
@@ -150,18 +160,19 @@ class Investigation:
                             response = response[8:-4]
                         parsed = json.loads(response)
                         batch = parsed["actions"] if isinstance(parsed, dict) and set(parsed) == {"actions"} else [parsed]
-                        if not isinstance(batch, list) or not 1 <= len(batch) <= 6:
+                        if not isinstance(batch, list) or not 1 <= len(batch) <= 12:
                             raise ValueError("Invalid action batch")
-                        actions = [Action.model_validate(value) for value in batch]
-                        self.actions = actions
-                        if len({a.lead_id for a in actions}) != len(actions):
+                        proposed_actions = [Action.model_validate(value) for value in batch]
+                        if len({a.lead_id for a in proposed_actions}) != len(proposed_actions):
                             raise ValueError("Batch must contain distinct leads")
-                        for proposed in actions:
+                        for proposed in proposed_actions:
                             proposed.lead_id = self.projection.resolve(proposed.lead_id)
                             target = next((p for p in pending if p["id"] == proposed.lead_id), None)
                             if target is None or proposed.tool not in self.available(target, completed_tools.get(target["id"], set())):
                                 raise ValueError("Action is not currently available")
-                    action = actions.pop(0)
+                        actions = proposed_actions
+                        self.actions = actions
+                    action = actions[0]
                 else:
                     lead = pending[0]
                     sequence = self.sequence(lead)
@@ -173,8 +184,10 @@ class Investigation:
                             self.case["can_resume"] = self.resume_count < 5
                     self._finish("cancelled" if self.cancelled.is_set() else "incomplete", "Stopped before applying the next action.")
                     break
+                if self.mode == "ai":
+                    actions.pop(0)
                 lead = next((lead for lead in pending if lead["id"] == action.lead_id), None)
-                if not lead or (action.lead_id, action.tool) in seen:
+                if not lead or (action.lead_id, action.tool) in seen or action.tool not in self.available(lead, completed_tools.get(lead["id"], set())):
                     raise ValueError("Unknown lead or repeated tool call")
                 seen.add((action.lead_id, action.tool))
                 with self.lock:
@@ -192,6 +205,26 @@ class Investigation:
                     self.event(lead["id"], "conclude", {"state": state, "reason": reason,
                                                          "rule": finding["rule"] if finding else None,
                                                          "evidence": finding["evidence"] if finding else lead["evidence"]})
+                elif action.tool == "inspect_evidence":
+                    seen.discard((lead["id"], "inspect_evidence"))
+                    for tool in self.sequence(lead):
+                        if tool in ("test_alternative", "conclude") or tool in completed_tools.get(lead["id"], set()):
+                            continue
+                        if len(seen) >= self.max_steps or self.cancelled.is_set() or time.monotonic() - started >= self.seconds:
+                            break
+                        if lead["kind"] == "invoice":
+                            result = TOOLS[tool](self.data, lead["subject_id"])
+                        elif tool == "trace_funds":
+                            result = bank_trace(self.data, lead["subject_id"], deadline=started + self.seconds, cancelled=self.cancelled)
+                        else:
+                            result = assess(self.data, lead)
+                        self.data.retrieve(result["evidence"])
+                        results[lead["id"]] = result
+                        completed_tools.setdefault(lead["id"], set()).add(tool)
+                        seen.add((lead["id"], tool))
+                        with self.lock:
+                            lead["evidence"] = sorted(set(lead["evidence"]) | set(result["evidence"]))
+                        self.event(lead["id"], tool, result)
                 else:
                     if lead["kind"] == "invoice":
                         result = TOOLS[action.tool](self.data, lead["subject_id"])
@@ -266,7 +299,8 @@ class Investigation:
             for lead in self.case["leads"]:
                 if lead["state"] == "deferred":
                     lead.update(state="investigating" if self.completed_tools.get(lead["id"]) else "pending", reason="Resuming remaining review.")
-            self.actions.clear()
+            if mode == "offline":
+                self.actions.clear()
             self.resume_pending = True
             self.event("case", "resume_review", {"mode": mode, "attempt": self.resume_count, "evidence": [], "reason": self.case["recovery"], "seconds": self.seconds})
 
