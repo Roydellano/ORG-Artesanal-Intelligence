@@ -71,18 +71,25 @@ async def restore(file: UploadFile):
 
 
 @router.post('/{identity}/run')
-def start(identity: str, mode: Literal['offline', 'ai'] = 'offline', usd_mxn_rate: str = '', fx_source: str = Query(default='', max_length=500)):
+def start(identity: str, mode: Literal['offline', 'ai'] = 'offline', usd_mxn_rate: str = '', fx_source: str = Query(default='', max_length=500), zdr: bool | None = Query(default=None)):
     item = session(identity)
     if mode == 'ai':
         from openrouter_client import settings
         from decimal import Decimal, InvalidOperation
         config = settings()
-        if config['model'].endswith(':free') or not config['api_key']:
-            raise HTTPException(422, 'Official uploaded estates need offline mode or a configured non-free model with no-collection/ZDR routing')
+        use_zdr = config.get('zdr', True) if zdr is None else bool(zdr)
+        if not config['api_key']:
+            raise HTTPException(422, 'Set OPENROUTER_API_KEY in the server .env before starting AI mode.')
+        if use_zdr and config['model'].endswith(':free'):
+            raise HTTPException(422, 'Official uploaded estates need offline mode, a configured non-free model with no-collection/ZDR routing, or toggle ZDR off for testing')
         try:
-            rate = Decimal(usd_mxn_rate)
-            if not rate.is_finite() or not 0 < rate < 1000 or not fx_source.strip():
+            rate_val = usd_mxn_rate if usd_mxn_rate else ('20' if (not use_zdr or config['model'].endswith(':free')) else '')
+            rate = Decimal(rate_val)
+            source_val = fx_source.strip() if fx_source else ('Testing / free model' if (not use_zdr or config['model'].endswith(':free')) else '')
+            if not rate.is_finite() or not 0 < rate < 1000 or not source_val:
                 raise ValueError()
+            fx_source = source_val
+            usd_mxn_rate = str(rate)
         except (InvalidOperation, ValueError):
             raise HTTPException(422, 'Provide a positive USD/MXN rate and its source to measure AI cost') from None
     with guard:
@@ -96,7 +103,7 @@ def start(identity: str, mode: Literal['offline', 'ai'] = 'offline', usd_mxn_rat
         try:
             if mode == 'ai':
                 from .agent import run
-                result = run(item['estate'], item['seed'], item['company'], cancelled=item['cancel'], usd_mxn_rate=usd_mxn_rate, fx_source=fx_source)
+                result = run(item['estate'], item['seed'], item['company'], cancelled=item['cancel'], usd_mxn_rate=usd_mxn_rate, fx_source=fx_source, zdr=zdr)
             else:
                 result = investigate(item['estate'], item['seed'], item['company'], cancelled=item['cancel'])
             with guard:

@@ -21,17 +21,43 @@ class Action(BaseModel):
     tool: Literal['inspect_evidence', 'test_alternative', 'conclude']
 
 
-def run(estate, seed, company, *, seconds=90, cancelled=None, usd_mxn_rate=None, fx_source='', model_chat=chat):
+def run(estate, seed, company, *, seconds=90, cancelled=None, usd_mxn_rate=None, fx_source='', model_chat=chat,
+        request_delay=None, max_retries=3, zdr=None):
     started = time.perf_counter()
     config = settings()
-    if config['model'].endswith(':free'):
+    use_zdr = config.get('zdr', True) if zdr is None else bool(zdr)
+    if use_zdr and config['model'].endswith(':free'):
         raise ValueError('Uploaded official estates require offline review or a non-free model with no-collection/ZDR routing')
     try:
-        rate = Decimal(str(usd_mxn_rate))
-        if not rate.is_finite() or not 0 < rate < 1000 or not fx_source.strip():
+        rate_val = usd_mxn_rate if usd_mxn_rate else ('20' if (not use_zdr or config['model'].endswith(':free')) else '')
+        rate = Decimal(str(rate_val))
+        source_val = fx_source.strip() if fx_source else ('Testing / free model' if (not use_zdr or config['model'].endswith(':free')) else '')
+        if not rate.is_finite() or not 0 < rate < 1000 or not source_val:
             raise ValueError()
+        fx_source = source_val
     except (InvalidOperation, ValueError):
         raise ValueError('AI mode requires a positive supplied USD/MXN exchange rate and its source') from None
+
+    if request_delay is not None:
+        delay = float(request_delay)
+    else:
+        env_delay = config.get('OPENROUTER_REQUEST_DELAY') if isinstance(config, dict) else None
+        if env_delay is not None:
+            delay = float(env_delay)
+        elif model_chat is chat:
+            delay = 5.0
+        else:
+            delay = 0.0
+
+    def wait_delay(seconds_to_wait):
+        if seconds_to_wait <= 0:
+            return
+        if cancelled is not None:
+            if cancelled.wait(seconds_to_wait):
+                raise ValueError('Investigation cancelled')
+        else:
+            time.sleep(seconds_to_wait)
+
     draft = investigate(estate, seed, company, seconds=seconds, cancelled=cancelled)
     case = deepcopy(draft)
     calls, steps, usd = 0, 0, Decimal(0)
@@ -65,30 +91,56 @@ def run(estate, seed, company, *, seconds=90, cancelled=None, usd_mxn_rate=None,
                 {'lead': aliases[lid], 'available_tool': TOOLS[stage], 'evidence_count': len(by_id[lid]['evidence']),
                  'predicate_supported': lid in valid_ids if stage > 0 else None}
                 for lid, stage in progress.items() if stage < 3]}
-            calls += 1
-            captured = []
-            def capture(value):
-                captured.append(value)
-                usage(value)
-            response = model_chat([
-                {'role': 'system', 'content': 'Choose the next evidence-review actions. Return JSON {"actions":[{"lead":"supplied alias","tool":"available_tool"}]}, one to six distinct leads. Use only available tools. Inspect evidence, test alternatives, then conclude. Do not supply claims or prose.'},
-                {'role': 'user', 'content': json.dumps(context)}],
-                max_tokens=config['max_tokens'], timeout=min(config['timeout'], remaining), synthetic=False, usage_callback=capture)
-            if not captured:
-                cost_known = False
-            response = response.strip()
-            if response.startswith('```json\n') and response.endswith('\n```'):
-                response = response[8:-4]
-            raw = json.loads(response)
-            if not isinstance(raw, dict) or set(raw) != {'actions'} or not isinstance(raw['actions'], list) or not 1 <= len(raw['actions']) <= 6:
-                raise ValueError('Malformed action batch')
-            actions = [Action.model_validate(action) for action in raw['actions']]
-            if len({a.lead for a in actions}) != len(actions):
-                raise ValueError('Repeated lead in action batch')
-            for action in actions:
-                lid = reverse.get(action.lead)
-                if lid not in progress or progress[lid] >= 3 or action.tool != TOOLS[progress[lid]]:
-                    raise ValueError('Unknown, repeated or out-of-order action')
+
+            actions = None
+            for attempt in range(max_retries + 1):
+                if calls > 0 and delay > 0:
+                    wait_delay(delay)
+                remaining = seconds - (time.perf_counter() - started)
+                if remaining < 5 or (cancelled and cancelled.is_set()):
+                    raise ValueError('Investigation cancelled or action/time budget exhausted')
+                calls += 1
+                captured = []
+                def capture(value):
+                    captured.append(value)
+                    usage(value)
+                try:
+                    chat_kwargs = {'max_tokens': config['max_tokens'], 'timeout': min(config['timeout'], remaining),
+                                   'synthetic': False, 'usage_callback': capture}
+                    if model_chat is chat:
+                        chat_kwargs['zdr'] = use_zdr
+                    response = model_chat([
+                        {'role': 'system', 'content': 'Choose the next evidence-review actions. Return JSON {"actions":[{"lead":"supplied alias","tool":"available_tool"}]}, one to six distinct leads. Use only available tools. Inspect evidence, test alternatives, then conclude. Do not supply claims or prose.'},
+                        {'role': 'user', 'content': json.dumps(context)}],
+                        **chat_kwargs)
+                    if not captured:
+                        cost_known = False
+                    response = response.strip()
+                    if response.startswith('```json\n') and response.endswith('\n```'):
+                        response = response[8:-4]
+                    raw = json.loads(response)
+                    if not isinstance(raw, dict) or set(raw) != {'actions'} or not isinstance(raw['actions'], list) or not 1 <= len(raw['actions']) <= 6:
+                        raise ValueError('Malformed action batch')
+                    parsed_actions = [Action.model_validate(action) for action in raw['actions']]
+                    if len({a.lead for a in parsed_actions}) != len(parsed_actions):
+                        raise ValueError('Repeated lead in action batch')
+                    for action in parsed_actions:
+                        lid = reverse.get(action.lead)
+                        if lid not in progress or progress[lid] >= 3 or action.tool != TOOLS[progress[lid]]:
+                            raise ValueError('Unknown, repeated or out-of-order action')
+                    actions = parsed_actions
+                    break
+                except (OpenRouterError, ValueError, TypeError, KeyError) as e:
+                    if (cancelled and cancelled.is_set()) or attempt >= max_retries:
+                        raise
+                    retry_wait = getattr(e, 'retry_after', None)
+                    if retry_wait is not None and retry_wait > delay:
+                        wait_delay(retry_wait - delay)
+                    continue
+
+            if not actions:
+                raise ValueError('No actions returned')
+
             for action in actions:
                 if cancelled and cancelled.is_set():
                     raise ValueError('Investigation cancelled')
@@ -120,5 +172,6 @@ def run(estate, seed, company, *, seconds=90, cancelled=None, usd_mxn_rate=None,
                             'wall_clock_seconds': round(time.perf_counter()-started, 6), 'deterministic': False,
                             'determinism_scope': 'Live model scheduling is not deterministic; completed-run replay preserves decisions and telemetry.',
                             'mode': 'ai', 'cost_by_role': {'controller_usd': str(usd)}, 'usd_mxn_rate': str(rate),
-                            'fx_source': fx_source, 'model': config['model'], 'prompt_version': PROMPT}
+                            'fx_source': fx_source, 'model': config['model'], 'prompt_version': PROMPT,
+                            'zdr': use_zdr}
     return case

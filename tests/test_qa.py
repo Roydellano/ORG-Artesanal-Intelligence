@@ -40,6 +40,10 @@ def test_bad_model_answers_fail_closed(response):
             qa.explain({'status': 'offline_complete'}, 'Explain', [], mask=lambda x: x)
 
 
+def test_qa_system_prompt_requires_english_response():
+    assert 'Always respond in English' in qa.SYSTEM
+
+
 def test_api_defaults_to_llm_and_keeps_history_local():
     # Existing generator returns public records and separate evaluator ground truth.
     from forensic_auditor.synthetic_records import records

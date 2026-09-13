@@ -20,6 +20,8 @@ def main():
     run.add_argument('--mode', choices=['offline', 'ai'], default='offline')
     run.add_argument('--usd-mxn-rate')
     run.add_argument('--fx-source', default='')
+    run.add_argument('--zdr', dest='zdr', action='store_true', default=None, help='Enforce Zero Data Retention (ZDR) routing')
+    run.add_argument('--no-zdr', dest='zdr', action='store_false', help='Disable ZDR routing for testing with free models or providers without ZDR')
     rerun = commands.add_parser('replay')
     rerun.add_argument('archive', type=Path)
     rerun.add_argument('--output', type=Path, default=Path('tmp/replayed-case'))
@@ -40,7 +42,7 @@ def main():
         if case is None:
             if args.mode == 'ai':
                 from .agent import run as ai_run
-                case = ai_run(estate, args.seed, company, usd_mxn_rate=args.usd_mxn_rate, fx_source=args.fx_source)
+                case = ai_run(estate, args.seed, company, usd_mxn_rate=args.usd_mxn_rate, fx_source=args.fx_source, zdr=args.zdr)
             else:
                 case = investigate(estate, args.seed, company)
     args.output.parent.mkdir(parents=True, exist_ok=True)

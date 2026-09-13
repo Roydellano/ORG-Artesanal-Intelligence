@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from forensic_auditor.api import app, sessions
 from forensic_auditor import voice
-from tools.setup_voice import agent_config, TOOL
+from tools.setup_voice import agent_config, TOOL, main as setup_voice_main
 
 
 def test_signing_keeps_key_server_side_and_validates_token():
@@ -52,6 +52,23 @@ def test_voice_requires_case_and_uses_existing_ai_answer_route():
         sessions.pop('voice-demo', None)
 
 
+def test_voice_falls_back_to_offline_when_ai_provider_fails():
+    from fastapi import HTTPException
+    sessions['voice-demo'] = {'synthetic': True, 'job': object()}
+    try:
+        with TestClient(app) as client:
+            def ask_mock(sid, req):
+                if req.mode == 'ai':
+                    raise HTTPException(502, 'OpenRouter HTTP 429: Rate-limited')
+                return {'answer': 'Offline extraction fallback', 'evidence': ['R-1']}
+            with patch('forensic_auditor.api.ask', side_effect=ask_mock):
+                response = client.post('/api/datasets/voice-demo/voice/ask', json={'question': 'Explain'})
+                assert response.status_code == 200
+                assert response.json()['answer'] == 'Offline extraction fallback'
+    finally:
+        sessions.pop('voice-demo', None)
+
+
 def test_provider_errors_are_sanitized():
     response = httpx.Response(401, text='private provider body secret', request=httpx.Request('GET', voice.BASE))
     with patch.object(voice, 'settings', return_value={'ELEVENLABS_API_KEY': 'secret'}), patch.object(voice.httpx, 'request', return_value=response):
@@ -62,12 +79,27 @@ def test_provider_errors_are_sanitized():
 
 def test_agent_config_requires_tool_wait_and_auth_and_bounds_duration():
     config = agent_config('tool_demo')
-    assert config['conversation_config']['tts']['model_id'] == 'eleven_flash_v2_5'
+    assert config['conversation_config']['tts']['model_id'] == 'eleven_flash_v2'
     assert agent_config('tool_demo', 'custom_voice')['conversation_config']['tts'] == {
-        'model_id': 'eleven_flash_v2_5', 'voice_id': 'custom_voice'}
+        'model_id': 'eleven_flash_v2', 'voice_id': 'custom_voice'}
     assert config['platform_settings']['auth']['enable_auth']
     assert not config['platform_settings']['privacy']['record_voice']
     assert config['conversation_config']['conversation']['max_duration_seconds'] == 180
     assert config['conversation_config']['agent']['prompt']['tool_ids'] == ['tool_demo']
+    assert config['conversation_config']['agent']['language'] == 'en'
+    assert 'Hello' in config['conversation_config']['agent']['first_message']
+    assert 'English' in config['conversation_config']['agent']['prompt']['prompt']
     assert TOOL['expects_response']
     assert TOOL['response_timeout_secs'] > 60
+
+
+def test_setup_voice_main_updates_configured_agent():
+    config = {'ELEVENLABS_API_KEY': 'secret', 'ELEVENLABS_TOOL_ID': 'tool_123',
+              'ELEVENLABS_AGENT_ID': 'agent_123', 'ELEVENLABS_VOICE_ID': ''}
+    with patch('tools.setup_voice.settings', return_value=config), \
+         patch('tools.setup_voice.request', return_value={'status': 'ok'}) as req:
+        setup_voice_main()
+        assert req.call_args.args[:2] == ('PATCH', '/convai/agents/agent_123')
+        payload = req.call_args.kwargs['payload']
+        assert payload['conversation_config']['agent']['language'] == 'en'
+        assert 'Hello' in payload['conversation_config']['agent']['first_message']

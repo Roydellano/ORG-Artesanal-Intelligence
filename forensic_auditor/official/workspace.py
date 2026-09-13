@@ -88,11 +88,12 @@ class Start(BaseModel):
     mode: Literal['offline', 'ai'] = 'offline'
     usd_mxn_rate: str = ''
     fx_source: str = ''
+    zdr: bool | None = None
 
 
 @router.post('/investigate')
 def investigate(identity: str, body: Start):
-    api.start(identity, body.mode, body.usd_mxn_rate, body.fx_source)
+    api.start(identity, body.mode, body.usd_mxn_rate, body.fx_source, zdr=body.zdr)
     api.session(identity)['workspace_mode'] = body.mode
     return get_case(identity)
 
@@ -152,3 +153,28 @@ def ask(identity: str, body: api.Question):
 @router.get('/export/{kind}')
 def export(identity: str, kind: str, full: bool = False):
     return api.export(identity, kind, reveal=full)
+
+
+@router.post('/voice/session')
+def voice_session(identity: str):
+    item = api.session(identity)
+    if not item['case']:
+        raise HTTPException(409, 'Run an investigation before starting voice.')
+    try:
+        from ..voice import signed_session, VoiceError
+        return signed_session()
+    except VoiceError as error:
+        raise HTTPException(502, str(error)) from None
+
+
+@router.post('/voice/ask')
+def voice_ask(identity: str, body: api.Question):
+    item = api.session(identity)
+    if not item['case']:
+        raise HTTPException(409, 'Run an investigation before starting voice.')
+    try:
+        return ask(identity, api.Question(question=body.question, mode='ai'))
+    except HTTPException as error:
+        if error.status_code == 502:
+            return ask(identity, api.Question(question=body.question, mode='offline'))
+        raise

@@ -212,6 +212,54 @@ def test_ai_masked_actions_cost_and_failure(estate, monkeypatch):
     monkeypatch.setenv('OPENROUTER_MODEL', 'example:free')
     with pytest.raises(ValueError):
         run(data, 101, COMPANY, model_chat=model, usd_mxn_rate='20', fx_source='Test')
+    # With zdr=False for testing, free model runs and succeeds
+    free_case = run(data, 101, COMPANY, model_chat=model, zdr=False)
+    assert free_case['status'] == 'complete'
+    assert len(free_case['findings']) == 5
+
+
+def test_ai_step_retries_and_delay(estate, monkeypatch):
+    from forensic_auditor.official.agent import run
+    from openrouter_client import OpenRouterRateLimit
+    _, data, _ = estate
+    monkeypatch.setenv('OPENROUTER_MODEL', 'test/eligible-model')
+
+    call_count = 0
+    delays = []
+    last_time = None
+
+    def model_flaky(messages, **kwargs):
+        nonlocal call_count, last_time
+        now = time.perf_counter()
+        if last_time is not None:
+            delays.append(now - last_time)
+        last_time = now
+        call_count += 1
+        if call_count <= 2:
+            raise OpenRouterRateLimit()
+        context = json.loads(messages[1]['content'])
+        kwargs['usage_callback']({'cost': '0.001', 'prompt_tokens': 100, 'completion_tokens': 30})
+        return json.dumps({'actions': [{'lead': l['lead'], 'tool': l['available_tool']} for l in context['leads'][:6]]})
+
+    # Fails twice then succeeds on retry 2; request_delay=0.01 for fast unit testing
+    case = run(data, 101, COMPANY, model_chat=model_flaky, usd_mxn_rate='20', fx_source='Test', request_delay=0.01, max_retries=3)
+    assert case['status'] == 'complete'
+    assert len(case['findings']) == 5
+    assert call_count >= 3
+    assert all(d >= 0.009 for d in delays)
+
+    # Exceeding max 3 retries (fails 4 times on a step) causes incomplete status
+    attempt_count = 0
+    def model_always_fails(*args, **kwargs):
+        nonlocal attempt_count
+        attempt_count += 1
+        raise OpenRouterRateLimit()
+
+    failed = run(data, 101, COMPANY, model_chat=model_always_fails, usd_mxn_rate='20', fx_source='Test', request_delay=0.0, max_retries=3)
+    assert failed['status'] == 'incomplete'
+    # 1 initial attempt + 3 retries = 4 attempts total
+    assert attempt_count == 4
+
 
 
 def test_partial_payment_refund_and_contradictory_delivery_abstain(estate):

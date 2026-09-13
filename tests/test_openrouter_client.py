@@ -54,6 +54,28 @@ class OpenRouterClientTests(unittest.TestCase):
                 with self.assertRaises(OpenRouterError):
                     chat([{"role": "user", "content": "hello"}])
 
+    @patch("openrouter_client.urlopen")
+    def test_zdr_toggle_allows_free_models_and_fallback_routing(self, send):
+        send.side_effect = lambda *a, **k: io.BytesIO(json.dumps({"choices": [{
+            "finish_reason": "stop", "message": {"content": "OK"}
+        }]}).encode())
+        # With default ZDR (on), free model without synthetic=True is rejected
+        with patch.dict("openrouter_client.os.environ", {"OPENROUTER_MODEL": "test:free", "OPENROUTER_ZDR": "on"}):
+            with self.assertRaises(OpenRouterError):
+                chat([{"role": "user", "content": "hello"}], synthetic=False)
+
+        # With ZDR toggled off, free model is allowed and provider routing allows fallbacks
+        with patch.dict("openrouter_client.os.environ", {"OPENROUTER_MODEL": "test:free", "OPENROUTER_ZDR": "off"}):
+            result = chat([{"role": "user", "content": "hello"}], synthetic=False)
+            self.assertEqual(result, "OK")
+            req = json.loads(send.call_args.args[0].data)
+            self.assertEqual(req["provider"], {"allow_fallbacks": True})
+
+        # Explicit zdr=False param also allows it
+        with patch.dict("openrouter_client.os.environ", {"OPENROUTER_MODEL": "test:free", "OPENROUTER_ZDR": "on"}):
+            result = chat([{"role": "user", "content": "hello"}], synthetic=False, zdr=False)
+            self.assertEqual(result, "OK")
+
 
 if __name__ == "__main__":
     unittest.main()

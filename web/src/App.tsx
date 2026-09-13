@@ -1338,8 +1338,8 @@ export default function App() {
                       <option value="ai">AI auditor</option>
                       <option value="offline">Offline case extraction</option>
                     </select></label>
-                    {!estate && <AuditorVoice key={dataset?.session_id} base={base} synthetic={Boolean(dataset?.synthetic)}
-                      onAnswer={(question, response) => setAnswers(previous => [...previous, { question, ...response }])} />}
+                    <AuditorVoice key={dataset?.session_id} base={base} synthetic={Boolean(dataset?.synthetic || estate)}
+                      onAnswer={(question, response) => setAnswers(previous => [...previous, { question, ...response }])} />
                     <div className="suggestions">
                       {[
                         "How was the total calculated?",

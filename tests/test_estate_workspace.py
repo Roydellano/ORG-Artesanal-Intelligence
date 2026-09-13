@@ -47,6 +47,13 @@ def test_zip_uses_shared_workspace_with_resolvable_sources_and_unchanged_exports
             answer = client.post(base + '/ask', json={'question': 'Explain the findings', 'mode': 'offline'}).json()
             assert answer['evidence'] and set(answer['evidence']) <= refs
             assert answer['case_status'] == case['status']
+            from unittest.mock import patch
+            with patch('forensic_auditor.voice.signed_session', return_value={'conversation_token': 'token123', 'max_seconds': 180}):
+                assert client.post(base + '/voice/session').json() == {'conversation_token': 'token123', 'max_seconds': 180}
+            with patch('forensic_auditor.official.workspace.ask', return_value={'answer': 'Voice answer', 'evidence': ['ref1'], 'mode': 'ai', 'case_status': case['status']}) as mock_ask:
+                v_ans = client.post(base + '/voice/ask', json={'question': 'Voice question', 'mode': 'offline'}).json()
+                assert v_ans['answer'] == 'Voice answer'
+                assert mock_ask.call_args.args[1].mode == 'ai'
             assert client.get(base + '/export/json?full=true').json() == original
             assert client.get(base + '/export/replay?full=true').content.startswith(b'PK')
             assert client.get(base + '/evidence?ref=another-dataset').status_code == 404

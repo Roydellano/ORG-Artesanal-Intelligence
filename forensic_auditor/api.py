@@ -156,7 +156,7 @@ def start(session_id: str, body: StartRequest):
         if not settings["configured"]:
             raise HTTPException(409, settings.get("error", "Set OPENROUTER_API_KEY in the server .env before starting AI mode."))
         if settings.get("synthetic_only") and not session["synthetic"]:
-            raise HTTPException(409, "This free model is restricted to app-generated fictional demos. Uploaded records require offline review or no-collection/ZDR model routing.")
+            raise HTTPException(409, "This free model is restricted to app-generated fictional demos. Uploaded records require offline review, a model with no-collection/ZDR routing, or toggle ZDR off for testing.")
     with guard:
         if session["job"] and session["job"].snapshot()["status"] in ("queued", "running"):
             raise HTTPException(409, "An investigation is already running.")
@@ -295,7 +295,12 @@ def start_voice(session_id: str):
 @app.post('/api/datasets/{session_id}/voice/ask')
 def voice_ask(session_id: str, body: QuestionRequest):
     voice_case(session_id)
-    return ask(session_id, QuestionRequest(question=body.question, mode='ai'))
+    try:
+        return ask(session_id, QuestionRequest(question=body.question, mode='ai'))
+    except HTTPException as error:
+        if error.status_code == 502:
+            return ask(session_id, QuestionRequest(question=body.question, mode='offline'))
+        raise
 
 
 @app.get("/api/datasets/{session_id}/export/{kind}")

@@ -14,6 +14,7 @@ export default function OfficialEstate({ initialSession }: { initialSession?: Js
   const [seed, setSeed] = useState(String(initialSession?.seed ?? 2026));
   const [company, setCompany] = useState(initialSession?.company_rfc ?? '');
   const [mode, setMode] = useState('offline');
+  const [zdr, setZdr] = useState(true);
   const [rate, setRate] = useState('');
   const [fxSource, setFxSource] = useState('');
   const [sid, setSid] = useState(initialSession?.session_id ?? '');
@@ -60,7 +61,7 @@ export default function OfficialEstate({ initialSession }: { initialSession?: Js
   async function action(name: string) {
     setError(''); setBusy(true);
     try {
-      const params = name === 'run' ? `?mode=${mode}&usd_mxn_rate=${encodeURIComponent(rate)}&fx_source=${encodeURIComponent(fxSource)}` : '';
+      const params = name === 'run' ? `?mode=${mode}&usd_mxn_rate=${encodeURIComponent(rate)}&fx_source=${encodeURIComponent(fxSource)}&zdr=${zdr}` : '';
       await call(`/${sid}/${name}${params}`, { method: 'POST' });
       setCase(await call(`/${sid}/case?reveal=${reveal}`));
     } catch (e) { setError(String(e)); }
@@ -75,8 +76,17 @@ export default function OfficialEstate({ initialSession }: { initialSession?: Js
     <div className="official-controls">
       <label>Estate seed <input aria-label="Official estate seed" value={seed} onChange={e => setSeed(e.target.value)} disabled={busy || running}/></label>
       <label>Audited company RFC <input aria-label="Audited company RFC" value={company} placeholder="Optional · inferred from invoices" onChange={e => setCompany(e.target.value)} disabled={busy || running}/></label>
-      <label>Review mode <select aria-label="Official review mode" value={mode} onChange={e => setMode(e.target.value)} disabled={busy || running}><option value="offline">Offline evidence review</option><option value="ai">AI · eligible non-free model</option></select></label>
-      {mode === 'ai' && <><label>USD/MXN rate <input value={rate} onChange={e => setRate(e.target.value)} placeholder="Supplied rate"/></label><label>Rate source/date <input value={fxSource} onChange={e => setFxSource(e.target.value)} placeholder="Source and quoted date"/></label><small>Uses your configured eligible model. Uploaded estates cannot use the free endpoint. Provider usage cost and your supplied exchange rate determine MXN cost.</small></>}
+      <label>Review mode <select aria-label="Official review mode" value={mode} onChange={e => setMode(e.target.value)} disabled={busy || running}><option value="offline">Offline evidence review</option><option value="ai">AI · {zdr ? 'eligible non-free model' : 'testing mode (free/any provider)'}</option></select></label>
+      {mode === 'ai' && <>
+        <label><input type="checkbox" checked={zdr} onChange={e => setZdr(e.target.checked)} disabled={busy || running}/> Enforce Zero Data Retention (ZDR) routing</label>
+        <label>USD/MXN rate <input value={rate} onChange={e => setRate(e.target.value)} placeholder={zdr ? "Supplied rate" : "20 (default for testing)"}/></label>
+        <label>Rate source/date <input value={fxSource} onChange={e => setFxSource(e.target.value)} placeholder={zdr ? "Source and quoted date" : "Testing (optional)"}/></label>
+        {zdr ? (
+          <small>Uses your configured eligible model. Uploaded estates cannot use the free endpoint without disabling ZDR. Provider usage cost and your supplied exchange rate determine MXN cost.</small>
+        ) : (
+          <small style={{ color: '#d97706' }}>Testing mode (ZDR off): OpenRouter routing restrictions are relaxed. Free models and all providers are allowed.</small>
+        )}
+      </>}
       <label className="official-upload">Upload estate .db or .zip <input aria-label="Upload official estate" type="file" accept=".db,.sqlite,.sqlite3,.zip" disabled={busy || running} onChange={e => { upload(e.target.files?.[0]); e.target.value = ''; }}/></label>
       <label className="official-upload">Replay completed run <input aria-label="Upload completed replay" type="file" accept=".zip" disabled={busy || running} onChange={e => { upload(e.target.files?.[0], true); e.target.value = ''; }}/></label>
     </div>
