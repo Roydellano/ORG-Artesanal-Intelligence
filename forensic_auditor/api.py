@@ -17,6 +17,7 @@ from .investigation import Investigation, answer
 from .reporting import export_case, printable
 from .privacy import Presentation
 from .qa import explain
+from .voice import signed_session, VoiceError
 from openrouter_client import public_settings, chat, OpenRouterError
 
 app = FastAPI(title="The Forensic Auditor", version="0.1.0")
@@ -246,6 +247,30 @@ def ask(session_id: str, body: QuestionRequest):
     session["data"].retrieve(result["evidence"])
     session["job"].event("case", "answer_question", {"question": body.question, **result})
     return session["presentation"].apply(result)
+
+
+def voice_case(session_id):
+    session = get_session(session_id)
+    if not session['synthetic']:
+        raise HTTPException(409, 'Voice is currently enabled only for app-generated fictional demos. Uploaded records are not sent to ElevenLabs.')
+    if not session['job']:
+        raise HTTPException(409, 'Run an investigation before starting voice.')
+    return session
+
+
+@app.post('/api/datasets/{session_id}/voice/session')
+def start_voice(session_id: str):
+    voice_case(session_id)
+    try:
+        return signed_session()
+    except VoiceError as error:
+        raise HTTPException(502, str(error)) from None
+
+
+@app.post('/api/datasets/{session_id}/voice/ask')
+def voice_ask(session_id: str, body: QuestionRequest):
+    voice_case(session_id)
+    return ask(session_id, QuestionRequest(question=body.question, mode='ai'))
 
 
 @app.get("/api/datasets/{session_id}/export/{kind}")

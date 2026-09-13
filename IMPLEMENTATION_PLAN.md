@@ -1,5 +1,9 @@
 # Forensic Auditor implementation plan
 
+## Hackathon real-time voice — September 12 update
+
+ElevenLabs voice is a separate interface around the existing case Q&A. A private agent and blocking client tool are created by `python -m tools.setup_voice`; the backend signs connections and the browser streams audio through the ElevenLabs SDK. Case questions return to the local auditor, and only its masked answers/citations are returned to the voice agent. Signed connection credentials remain short-lived; the API key stays server-side. Voice includes connection/listening/speaking state, interruption support through the SDK, visible transcripts, cleanup on navigation, a three-minute session bound and eight-question UI budget. Uploaded records are rejected pending separate ElevenLabs privacy review. Spoken paraphrases do not modify findings. No ElevenLabs credentials were present during implementation, so live setup, audio and latency remain unverified.
+
 ## Conversational case Q&A — September 12 update
 
 Ask the Auditor now defaults to OpenRouter-backed conversation in CSV and official views. A separate masked case projection includes findings, exact supplied calculations, evidence trails, alternatives, lead dispositions and investigation logs; six successful exchanges provide conversational continuity. Source originals and unrestricted document fields are excluded. Unknown/cross-case citations and malformed responses are rejected, context has a hard size bound, and failures never silently switch modes. Existing free-demo/ZDR-upload restrictions remain. Offline extraction is explicitly selectable. Generated prose does not change deterministic findings, and reference validation does not establish semantic correctness. Authenticated live Q&A latency remains unverified.

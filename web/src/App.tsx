@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { money } from "./money";
 import AuditorMarkdown from "./AuditorMarkdown";
+import AuditorVoice from "./AuditorVoice";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -1275,6 +1276,8 @@ export default function App() {
                       <option value="ai">AI auditor</option>
                       <option value="offline">Offline case extraction</option>
                     </select></label>
+                    <AuditorVoice key={dataset?.session_id} base={base} synthetic={Boolean(dataset?.synthetic)}
+                      onAnswer={(question, response) => setAnswers(previous => [...previous, { question, ...response }])} />
                     <div className="suggestions">
                       {[
                         "How was the total calculated?",

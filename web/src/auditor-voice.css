@@ -1,0 +1,13 @@
+.auditor-voice { margin: 18px 0; padding: 16px; border: 1px solid #cbdabb; border-radius: 10px; background: #f5f8ef; }
+.voice-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.voice-controls + .voice-controls { margin-top: 12px; }
+.voice-controls label { font-size: 12px; }
+.voice-controls select { max-width: 260px; padding: 7px; margin-left: 6px; }
+.voice-controls button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #6c8656; border-radius: 7px; background: #3c5c30; color: white; }
+.voice-controls button:disabled { opacity: .5; cursor: not-allowed; }
+.voice-controls span, .auditor-voice p, .auditor-voice small, .auditor-voice summary { font-size: 12px; line-height: 1.6; }
+.auditor-voice > p { margin: 10px 0 0; color: #526547; }
+.auditor-voice .voice-error { color: #993e26; }
+.voice-transcript { max-height: 220px; overflow-y: auto; overflow-wrap: anywhere; margin: 10px 0; }
+.voice-transcript p { margin: 8px 0; }
+.auditor-voice details { margin-top: 12px; }

@@ -37,4 +37,8 @@ For uploaded data, [provider routing](https://openrouter.ai/docs/guides/routing/
 
 ## Retention
 
+### ElevenLabs voice demo
+
+The separate voice integration only accepts app-generated fictional datasets. It signs an authenticated ElevenLabs WebSocket connection without sending case data. Microphone audio goes directly from the browser to ElevenLabs; only masked auditor answers and citations return through the client tool. Audio cannot be locally redacted before transcription, so do not speak real confidential details. The browser starts transmission only after Start voice and microphone permission. End voice/navigation closes the connection; a pending connection is closed when SDK startup resolves. Setup requests recording off, one-day retention, and transcript/audio deletion, but does not establish zero retention or change workspace-wide privacy settings. The voice agent may paraphrase the grounded answer; its speech is not an evidence-gated finding. Uploaded data remains unavailable to voice pending a separate routing/privacy implementation. See README for setup and live-verification limits.
+
 Sessions and aliases live in process memory. Deletion cancels active work and removes the session after any in-flight request finishes. Restarting also loses sessions. Exported files and optional CLI SQLite archives persist independently; deletion in the app cannot retract earlier exports or provider requests. Credentials and provider response bodies are excluded from app errors. Run only on loopback.

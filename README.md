@@ -43,6 +43,24 @@ On Windows, after installing dependencies, double-click `restart-servers.bat` to
 
 ## AI configuration
 
+### Real-time voice for the hackathon
+
+1. Add `ELEVENLABS_API_KEY` to your local `.env` (never browser code). Keep your existing `OPENROUTER_API_KEY`: the auditor still uses it for grounded answers. Optionally set `ELEVENLABS_VOICE_ID` to a voice you can access.
+2. Create the private voice agent once:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m tools.setup_voice
+   ```
+
+   This creates an `ask_auditor` client tool and an ElevenLabs agent, then saves their IDs in `.env` without replacing existing keys. The voice agent uses Gemini 2.5 Flash for conversation and delegates case questions to the configured OpenRouter auditor. Existing configured agents are left unchanged. The ElevenLabs key needs permission to create tools/agents and obtain conversation signed URLs. Review your account's available credits before the demo; voice usage is separate from OpenRouter usage.
+3. Build the frontend and restart the backend after installing this update. Load an **app-generated demo**, run an investigation, open **Ask the auditor**, and click **Start voice**. Allow microphone access. Ask in Spanish or English, interrupt naturally, or click **End voice**. Case answers and their citations appear in the existing chat; live speech transcripts appear in the voice panel.
+
+The browser uses ElevenLabs' signed WebSocket connection for microphone input, turn detection, interruptions and audio playback; no public tunnel is needed. Signed URLs are ephemeral bearer credentials and must not be shared. The agent calls the browser's bounded `ask_auditor` tool, which invokes the local API and returns only the masked answer and citations. It receives no estate files or source-record dump. Sessions end after three minutes and the UI permits eight case questions. Leaving the auditor view ends voice. Auditing still waits for OpenRouter's complete response, so real-time audio does not guarantee instant case answers. Spoken summaries can differ from the cited answer and never change findings.
+
+Voice currently rejects uploaded datasets, including downloaded demos that are re-uploaded. Microphone audio is transmitted directly to ElevenLabs and cannot be masked locally; keep speech limited to fictional case questions. Agent setup disables voice recording and requests one-day transcript retention with deletion; it does not establish ZDR or administer account-wide logging. Existing OpenRouter privacy controls do not automatically apply to ElevenLabs. See [ElevenLabs client tools](https://elevenlabs.io/docs/eleven-agents/customization/tools/client-tools) and [signed URL authentication](https://elevenlabs.io/docs/api-reference/conversations/get-signed-url).
+
+Validation uses mocked provider calls. Live microphone quality, interruptions, account provisioning, credit usage and end-to-end latency need a configured ElevenLabs key and a human rehearsal.
+
 Auditor answers render Markdown in both case views, including emphasis, nested lists, tables, quotes and code blocks. Raw HTML and automatic remote images are disabled; evidence citation controls remain separate.
 
 **Ask the Auditor** defaults to conversational AI in both case views, independently of investigation mode. It receives masked findings, calculations, money trails, lead dispositions and recorded checks, plus the last six successful exchanges. Known dataset identities and common contact/RFC/account patterns in questions are masked; do not add new confidential details. Citations must resolve to evidence in the current case. Explanations do not modify validated findings; citation existence does not guarantee prose correctness. Provider failures are displayed explicitly. Select **Offline case extraction** for network-free answers. Uploaded records still require a non-free model with no-collection/ZDR routing. Oversized context fails explicitly. The narrower controller projection described below applies to investigation scheduling, not conversational Q&A.
