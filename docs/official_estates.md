@@ -18,7 +18,7 @@ The audited company RFC is optional: when omitted it is inferred as the RFC on t
 
 The CLI writes judge JSON, standalone original HTML, masked HTML and a replay ZIP, and prints a **decision fingerprint** (hash of findings, leads and log). A repeat invocation with matching output, estate, seed, company and mode reuses the completed run; `--fresh` measures a new one. Two fresh runs differ only in wall-clock telemetry, so their fingerprints are equal. Replay reproduces the exact file with no network.
 
-In the React **Overview**, use **Judge estate · official estate.db or estate_csv.zip**. Enter the seed, optionally the company RFC, upload, then investigate.
+In the React **Overview**, drop `estate_csv.zip` into **Drop your company dataset here**, then click **Start investigation**. The eight-table input uses the same workspace as the fictional demo: Investigation, Case file, Source records, and Ask the auditor. The company is inferred from invoices. SQLite upload and replay restoration remain available through the estate API/CLI. The shared workspace displays masked records and resolves evidence links locally; original judge JSON and replay downloads are in Case file. Completed review results populate the timeline and graph; the estate controller does not stream intermediate tool events.
 
 ## How a finding is published
 

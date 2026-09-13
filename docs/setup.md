@@ -16,7 +16,7 @@ npm --prefix web run build
 
 Open **http://127.0.0.1:8000**, load the demo, keep Offline evidence review selected, and start an investigation. All five views use the live API; findings are not hard-coded in React. Build before starting the API so static assets are mounted.
 
-Below the original demo controls, **Load demo · hackathon-format test files** offers seven downloadable CSV ZIP estates: phantom vendor, kickback, round tripping, threshold splitting, revenue inflation, mixed, and clean control. Select **Load test estate**, then **Investigate estate**. These are fictional practice files built to the managers' schema, not supplied judge datasets. See [practice files and rebuild command](../demo-estates/README.md). Verify them with `.\.venv\Scripts\python.exe -m pytest tests/test_demo_estates.py -q`.
+Upload `estate_csv.zip` through **Drop your company dataset here**, then click **Start investigation**. The eight-table upload and **Load demo** share the main workspace, including investigation visuals, source inspection, case files and Q&A. Use **Offline case extraction** for questions without external inference. Judge JSON and replay downloads are available in Case file for eight-table uploads.
 
 For React development, keep the API running and start Vite in a second terminal:
 

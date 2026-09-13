@@ -26,6 +26,8 @@ from openrouter_client import public_settings, chat, OpenRouterError
 app = FastAPI(title="The Forensic Auditor", version="0.1.0")
 from .official.api import router as official_router
 app.include_router(official_router)
+from .official.workspace import router as estate_workspace_router
+app.include_router(estate_workspace_router)
 from .integrity_api import router as integrity_router
 app.include_router(integrity_router)
 

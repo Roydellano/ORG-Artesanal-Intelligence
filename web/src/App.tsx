@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { money } from "./money";
 import AuditorMarkdown from "./AuditorMarkdown";
 import AuditorVoice from "./AuditorVoice";
-import OfficialEstate from "./OfficialEstate";
 import IntegrityPanel from "./IntegrityPanel";
 import InvestigationInsights from "./InvestigationInsights";
 import {
@@ -39,6 +38,7 @@ type Dataset = {
   warnings: string[];
   files: string[];
   synthetic?: boolean;
+  kind?: "official";
 };
 type Case = {
   status: string;
@@ -258,7 +258,8 @@ function MoneyGraph({
 export default function App() {
   const [view, setView] = useState<View>("Overview");
   const [dataset, setDataset] = useState<Dataset | null>(null);
-  const [officialSession, setOfficialSession] = useState<Record<string, any> | null>(null);
+  const [rate, setRate] = useState("");
+  const [fxSource, setFxSource] = useState("");
   const [caseFile, setCase] = useState<Case | null>(null);
   const [selectedFindingId, setSelectedFindingId] = useState('');
   const [mode, setMode] = useState("offline");
@@ -284,7 +285,8 @@ export default function App() {
   const closeEvidence = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const running = !!active(caseFile);
-  const base = dataset ? `/datasets/${dataset.session_id}` : "";
+  const estate = dataset?.kind === "official";
+  const base = dataset ? estate ? `/estates/${dataset.session_id}/workspace` : `/datasets/${dataset.session_id}` : "";
 
   useEffect(() => { request("/config").then(setConfiguration).catch(e => setError(e.message)); }, []);
 
@@ -353,6 +355,9 @@ export default function App() {
     sessionRef.current = data.session_id;
     setDataset(data);
     setCase(null);
+    setSelectedFindingId("");
+    setTable("invoices");
+    setQuestion("");
     setAnswers([]);
     setEvidence(null);
     setOffset(0);
@@ -370,8 +375,7 @@ export default function App() {
       form.append("file", file);
       const result = await request(`/datasets/upload?seed=${seed}`, { method: "POST", body: form });
       if (result.kind === "official") {
-        setOfficialSession({ ...result, seed });
-        window.setTimeout(() => document.getElementById('official-upload-result')?.scrollIntoView({ behavior: 'smooth' }), 0);
+        load({ ...result, dataset_id: result.estate_sha256, files: Object.keys(result.coverage).map(name => `${name}.csv`), warnings: [] });
       } else {
         load(result);
       }
@@ -379,7 +383,7 @@ export default function App() {
   }
   async function investigate() {
     await perform(async () => {
-      setCase(await post(`${base}/investigate`, { mode }));
+      setCase(await post(`${base}/investigate`, estate ? { mode, usd_mxn_rate: rate, fx_source: fxSource } : { mode }));
       setView("Investigation");
     });
   }
@@ -563,7 +567,7 @@ export default function App() {
               {caseFile && <Badge value={caseFile.status} />}
               <button
                 className="primary"
-                disabled={!dataset || busy || running}
+                disabled={!dataset || busy || running || (estate && !!caseFile && !["failed"].includes(caseFile.status))}
                 onClick={investigate}
               >
                 {busy ? (
@@ -571,7 +575,7 @@ export default function App() {
                 ) : (
                   <Play size={15} />
                 )}{" "}
-                {caseFile ? "Run again" : "Start investigation"}
+                {estate && caseFile && caseFile.status !== "failed" ? "Investigation started" : caseFile ? "Run again" : "Start investigation"}
               </button>
             </div>
           </div>
@@ -695,7 +699,7 @@ export default function App() {
                   icon={<ShieldCheck size={18} />}
                 />
                 <Metric
-                  label="EXCESS SETTLEMENT"
+                  label={estate ? "DOCUMENTED EXPOSURE" : "EXCESS SETTLEMENT"}
                   value={caseFile ? money(caseFile.totals.MXN || 0) : "—"}
                   detail="MXN exposure · not demonstrated loss"
                   icon={<FileCheck2 size={18} />}
@@ -733,8 +737,9 @@ export default function App() {
                     <span>
                       or <u>browse files</u> to upload
                     </span>
-                    <small>ZIP of documented CSV files · up to 20 MB</small>
+                    <small>estate_csv.zip · 8 CSV tables · up to 20 MB</small>
                   </div>
+                  <p className="mode-note">vendors, invoices, ledger, bank_txns, purchase_orders, contracts, employees, and efos_list. Original demo CSV bundles are also supported.</p>
                   <div className="dataset-summary">
                     {dataset ? (
                       <>
@@ -809,6 +814,7 @@ export default function App() {
                       ? "AI receives pseudonymous lead summaries only. Up to 60 tool steps / 180 seconds. Free endpoints are available only for app-generated fictional demos."
                       : "Offline review is labeled separately from an AI investigation. Findings still require verified relationships and exact calculations."}
                   </p>
+                  {estate && mode === "ai" && <div className="panel-actions"><label>USD/MXN rate <input value={rate} onChange={e => setRate(e.target.value)} disabled={running} /></label><label>Rate source and date <input value={fxSource} onChange={e => setFxSource(e.target.value)} disabled={running} /></label></div>}
                   <p className="mode-note">Model: {configuration.model || "Not configured"}. {configuration.configured ? "Server key configured." : "Server API key is missing."}</p>
                   <div className="panel-actions">
                     <button className="secondary" disabled={busy || running} onClick={() => perform(async () => {
@@ -863,7 +869,6 @@ export default function App() {
                   </a>
                 </section>
               </div>
-              {officialSession && <div id="official-upload-result"><OfficialEstate key={officialSession.session_id} initialSession={officialSession} /></div>}
               {dataset && dataset.warnings.length > 0 && (
                 <details className="coverage-notes">
                   <summary>Coverage notes · {dataset.warnings.length}</summary>
@@ -1065,7 +1070,7 @@ export default function App() {
               <>
                 <div className="case-summary">
                   <div>
-                    <div className="eyebrow">EXCESS-SETTLEMENT EXPOSURE</div>
+                    <div className="eyebrow">{estate ? "DOCUMENTED EXPOSURE" : "EXCESS-SETTLEMENT EXPOSURE"}</div>
                     {Object.entries(caseFile.totals).length ? (
                       Object.entries(caseFile.totals).map(
                         ([currency, value]) => (
@@ -1076,11 +1081,11 @@ export default function App() {
                       <h2>No verified exposure</h2>
                     )}
                     <p>
-                      Explicit allocations, counted once. Not demonstrated loss
-                      or tax liability.
+                      {estate ? caseFile.total_definition : "Explicit allocations, counted once. Not demonstrated loss or tax liability."}
                     </p>
                   </div>
                   <div className="export-actions">
+                  {estate && <><a className="secondary" href={`/api${base}/export/json?full=true`}>Judge JSON · original identities</a><a className="secondary" href={`/api${base}/export/replay?full=true`}>Offline replay · original records</a></>}
                     <button
                       className="secondary"
                       onClick={downloadJson}
@@ -1093,7 +1098,7 @@ export default function App() {
                     </a>
                   </div>
                 </div>
-                {dataset && <IntegrityPanel key={dataset.session_id} kind="datasets" identity={dataset.session_id} running={running} />}
+                {dataset && <IntegrityPanel key={dataset.session_id} kind={estate ? "estates" : "datasets"} identity={dataset.session_id} running={running} />}
                 <section className="panel category-panel"><h3>Separate amount categories</h3>
                   <p>{caseFile.total_definition}</p>
                   {Object.entries(caseFile.totals_by_category || {}).map(([category, values]) => <p key={category}><b>{category.replaceAll("_", " ")}</b>: {Object.entries(values).map(([currency, amount]) => money(amount, currency)).join(" · ")}</p>)}
@@ -1121,7 +1126,7 @@ export default function App() {
                           {finding.supplier_name} · {finding.invoice_id}
                         </p>
                       </div>
-                      <Badge value="substantiated" />
+                      <Badge value={finding.confidence || "substantiated"} />
                     </div>
                     <p>{finding.claim}</p>
                     {finding.rule === "excess-settlement-v1" ? <div className="calculation">
@@ -1333,8 +1338,8 @@ export default function App() {
                       <option value="ai">AI auditor</option>
                       <option value="offline">Offline case extraction</option>
                     </select></label>
-                    <AuditorVoice key={dataset?.session_id} base={base} synthetic={Boolean(dataset?.synthetic)}
-                      onAnswer={(question, response) => setAnswers(previous => [...previous, { question, ...response }])} />
+                    {!estate && <AuditorVoice key={dataset?.session_id} base={base} synthetic={Boolean(dataset?.synthetic)}
+                      onAnswer={(question, response) => setAnswers(previous => [...previous, { question, ...response }])} />}
                     <div className="suggestions">
                       {[
                         "How was the total calculated?",
@@ -1549,7 +1554,7 @@ export default function App() {
                 {evidence.file}
               </span>
               <span>
-                <b>CSV record</b>
+                <b>Source location</b>
                 {evidence.csv_record}
               </span>
               <span>

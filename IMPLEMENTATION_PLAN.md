@@ -362,3 +362,6 @@ Implemented a separate integrity sidecar for CSV and official-estate case views.
 
 ### Investigation visual explanation update
 Implemented a lead-disposition ring, selectable verified-finding explorer, integer-based reconciliation bars, exact calculation and evidence controls, and selected-finding highlights on the observed-transfer graph. The original CSV Investigation view uses existing validated case facts; the official estate case view retains its separate contract. Graph controls support keyboard activation and resolve masked evidence references returned by trace tools.
+
+### Shared dataset workspace (September 13)
+Eight-table `estate_csv.zip` uploads now enter the same React workspace as Load demo. A presentation adapter maps validated estate findings, centavo amounts, lead dispositions, completed review events, observed transfers, and dataset-bound evidence tokens to the existing views. The accounting engine and judge/replay contracts remain separate internally. Original values require local reveal; external inference restrictions remain enforced. Estate progress is status-only until review finishes, rather than live tool streaming. Validation: workspace upload/source/export integration test, existing estate tests, frontend tests and production build.

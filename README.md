@@ -56,7 +56,7 @@ The accounting checks run locally in Python. In **AI investigation mode**, a mod
 
 **Ask the Auditor** has its own mode selector: conversational AI explains a masked version of the case, while **Offline case extraction** retrieves supported information without network access. Choose offline extraction for a fully offline demo, even if the investigation itself already ran offline. Generated explanations do not change validated findings.
 
-## Two supported input workflows
+## Supported input formats
 
 An *estate* means the collection of company records supplied for investigation.
 
@@ -82,8 +82,8 @@ npm --prefix web run build
 ~~~
 
 1. Open [the local app](http://127.0.0.1:8000).
-2. In **Load demo · hackathon-format test files**, select a fictional scenario and click **Load test estate**.
-3. Keep investigation mode offline and click **Investigate estate**.
+2. Drop `estate_csv.zip` into **Drop your company dataset here**, or click **Load demo** for fictional records.
+3. Keep investigation mode offline and click **Start investigation**. Both inputs use the same workspace navigation and case views.
 4. Open a finding, follow its money trail and inspect its evidence. Review a declined lead and its explanation.
 5. Select **Offline case extraction** to ask about the completed case without configuring AI.
 6. Download the report and replay bundle before restarting the server.
