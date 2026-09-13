@@ -4,6 +4,8 @@ import AuditorMarkdown from "./AuditorMarkdown";
 import AuditorVoice from "./AuditorVoice";
 import IntegrityPanel from "./IntegrityPanel";
 import InvestigationInsights from "./InvestigationInsights";
+import traceBlockLogo from "./assets/TraceBlock.png";
+import traceBlockCompact from "./assets/TraceBlockCompact.png";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -168,7 +170,7 @@ function MoneyGraph({
             refY="3"
             orient="auto"
           >
-            <path d="M0,0 L0,6 L7,3 z" fill="#648777" />
+            <path d="M0,0 L0,6 L7,3 z" fill="#238294" />
           </marker>
         </defs>
         {edges.map((edge, i) => {
@@ -193,7 +195,7 @@ function MoneyGraph({
               <path
                 d={`M${a.x},${a.y} Q${midX},${midY} ${b.x - (dx / length) * 18},${b.y - (dy / length) * 18}`}
                 fill="none"
-                stroke={highlightedEvidence.includes(edge.evidenceRef) ? '#b96145' : '#648777'}
+                stroke={highlightedEvidence.includes(edge.evidenceRef) ? '#d9534f' : '#238294'}
                 strokeWidth={highlightedEvidence.includes(edge.evidenceRef) ? 4 : 2}
                 markerEnd="url(#arrow)"
               />
@@ -218,7 +220,7 @@ function MoneyGraph({
                 cx={point.x}
                 cy={point.y}
                 r="14"
-                fill="#214e3c"
+                fill="#0c2a4c"
                 stroke="#fff"
                 strokeWidth="4"
               />
@@ -473,15 +475,13 @@ export default function App() {
             e.preventDefault();
             setView("Overview");
           }}
+          title="TraceBlock"
         >
-          <span className="brand-icon">
-            <Fingerprint size={28} />
-          </span>
-          <span>
-            THE FORENSIC
-            <br />
-            <b>AUDITOR</b>
-          </span>
+          <img
+            src={traceBlockLogo}
+            alt="TraceBlock Forensic Audit Solutions"
+            className="brand-logo"
+          />
         </a>
         <div className="workspace-label">
           AUDIT WORKSPACE <span>MVP</span>
@@ -541,7 +541,7 @@ export default function App() {
           <div className="page-heading">
             <div>
               <div className="eyebrow">
-                THE FORENSIC AUDITOR /{" "}
+                TRACEBLOCK /{" "}
                 {view === "Overview" ? "WORKSPACE 01" : view.toUpperCase()}
               </div>
               <h1>{view === "Overview" ? "Follow the money." : view}</h1>
@@ -1507,7 +1507,14 @@ export default function App() {
             </>
           )}
           <footer>
-            <span>THE FORENSIC AUDITOR</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <img
+                src={traceBlockCompact}
+                alt=""
+                style={{ width: "16px", height: "16px", borderRadius: "3px" }}
+              />
+              TRACEBLOCK
+            </span>
             <span>Prove the discrepancy. Preserve the uncertainty.</span>
             <span>v0.1 / local prototype</span>
           </footer>

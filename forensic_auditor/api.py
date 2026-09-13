@@ -23,7 +23,7 @@ from .voice import signed_session, VoiceError
 from . import storage
 from openrouter_client import public_settings, chat, OpenRouterError
 
-app = FastAPI(title="The Forensic Auditor", version="0.1.0")
+app = FastAPI(title="TraceBlock", version="0.1.0")
 from .official.api import router as official_router
 app.include_router(official_router)
 from .official.workspace import router as estate_workspace_router
@@ -352,4 +352,4 @@ if (DIST / "assets").exists():
 def index():
     if (DIST / "index.html").exists():
         return FileResponse(DIST / "index.html")
-    return HTMLResponse("<h1>The Forensic Auditor API</h1><p>Start the React dev server or run npm run build in web/.</p><a href='/docs'>API documentation</a>")
+    return HTMLResponse("<h1>TraceBlock API</h1><p>Start the React dev server or run npm run build in web/.</p><a href='/docs'>API documentation</a>")

@@ -2,7 +2,7 @@
 from dotenv import set_key
 from forensic_auditor.voice import ENV_PATH, VoiceError, request, settings
 
-PROMPT = '''You are the voice interface for The Forensic Auditor, a fictional hackathon demo.
+PROMPT = '''You are the voice interface for TraceBlock, an evidence-first forensic auditing platform.
 For EVERY question about the case, call ask_auditor with the user's full question, then wait.
 Use only the returned answer as your factual authority. Never invent findings, amounts or evidence.
 Speak a concise faithful summary, preserving uncertainty, exposure versus loss, and incomplete status.
@@ -21,11 +21,11 @@ TOOL = {'type': 'client', 'name': 'ask_auditor',
 
 
 def agent_config(tool_id, voice_id=''):
-    config = {'name': 'Forensic Auditor — Hackathon Voice',
+    config = {'name': 'TraceBlock — Hackathon Voice',
               'conversation_config': {
                   'tts': {'model_id': 'eleven_flash_v2_5'},
                   'agent': {'language': 'es',
-                            'first_message': 'Hola, soy la voz del auditor de inteligencia artificial. ¿Qué quieres revisar de este caso de demostración?',
+                            'first_message': 'Hola, soy la voz de TraceBlock. ¿Qué quieres revisar de este caso de demostración?',
                             'prompt': {'prompt': PROMPT, 'llm': 'gemini-2.5-flash', 'tool_ids': [tool_id]}},
                   'conversation': {'max_duration_seconds': 180,
                                    'client_events': ['audio', 'interruption', 'user_transcript', 'agent_response', 'client_tool_call']}},

@@ -6,7 +6,7 @@ type RecordView = Record<string, any>;
 const dispositions = [
   { label: 'Substantiated', states: ['substantiated'], color: '#b96145' },
   { label: 'Needs evidence', states: ['inconclusive', 'deferred'], color: '#bc933c' },
-  { label: 'Dismissed', states: ['dismissed'], color: '#527c68' },
+  { label: 'Dismissed', states: ['dismissed'], color: '#238294' },
   { label: 'In review', states: ['pending', 'investigating'], color: '#8998ac' },
 ];
 
@@ -34,7 +34,7 @@ export default function InvestigationInsights({ leads, findings, selectedId, onS
       <div className="insight-intro"><span className="tiny-label">EVIDENCE AT A GLANCE</span><h2>Where the records disagree.</h2><p>Follow a verified discrepancy from the amount to the records that support it.</p><div className="insight-counts"><span><b>{findings.length}</b> verified findings</span><span><b>{leads.length}</b> leads examined or queued</span></div></div>
       <div className="disposition-chart">
         <svg viewBox="0 0 120 120" role="img" aria-label={`Lead dispositions: ${segments.map(g => `${g.count} ${g.label}`).join(', ')}`}>
-          <circle cx="60" cy="60" r="46" fill="none" stroke="#e9ece5" strokeWidth="12" />
+          <circle cx="60" cy="60" r="46" fill="none" stroke="#e2edf2" strokeWidth="12" />
           {segments.map(group => { const portion = leads.length ? group.count / leads.length * 100 : 0; const start = offset; offset += portion; return <circle key={group.label} cx="60" cy="60" r="46" fill="none" stroke={group.color} strokeWidth="12" pathLength="100" strokeDasharray={`${portion} ${100 - portion}`} strokeDashoffset={-start} transform="rotate(-90 60 60)"><title>{group.label}: {group.count}</title></circle>; })}
           <text x="60" y="59" textAnchor="middle" className="ring-number">{leads.length}</text><text x="60" y="76" textAnchor="middle" className="ring-label">LEADS</text>
         </svg>

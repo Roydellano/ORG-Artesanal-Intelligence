@@ -1,8 +1,8 @@
-# The Forensic Auditor
+# TraceBlock
 
 **Follow the money. Check the evidence. Explain the finding.**
 
-The Forensic Auditor helps finance and audit teams investigate suspicious activity in a company's accounting records. It connects invoices, payments, suppliers and supporting records into a case file that explains what happened, which records support it, how the peso amount was calculated, and which suspicions were dismissed or remain unresolved.
+TraceBlock helps finance and audit teams investigate suspicious activity in a company's accounting records. It connects invoices, payments, suppliers and supporting records into a case file that explains what happened, which records support it, how the peso amount was calculated, and which suspicions were dismissed or remain unresolved.
 
 Built for the **HackMTY 2026 Infosys challenge**, this is a working local prototype. It helps a reviewer assess supported accounting findings; it does not establish legal guilt or guarantee that every fraud scheme will be found.
 

@@ -1,7 +1,7 @@
 .auditor-markdown {
   min-width: 0;
   margin: 12px 0 15px;
-  color: #526547;
+  color: #334e68;
   font-size: 13px;
   line-height: 1.7;
   overflow-wrap: anywhere;
@@ -9,7 +9,7 @@
 .auditor-markdown p { margin: 0 0 12px; }
 .auditor-markdown :is(h1, h2, h3, h4, h5, h6) {
   margin: 20px 0 10px;
-  color: #354b2c;
+  color: #0c2a4c;
   line-height: 1.35;
 }
 .auditor-markdown h1 { font-size: 21px; }
@@ -21,34 +21,34 @@
 .auditor-markdown li { margin: 7px 0; }
 .auditor-markdown li > :is(ul, ol) { margin: 8px 0 12px; }
 .auditor-markdown li > p { margin: 6px 0; }
-.auditor-markdown strong { font-weight: 650; color: #354b2c; }
+.auditor-markdown strong { font-weight: 650; color: #0c2a4c; }
 .auditor-markdown blockquote {
   margin: 12px 0;
-  border-left: 3px solid #a7b995;
+  border-left: 3px solid #238294;
   padding: 4px 14px;
-  background: #f3f6ee;
+  background: #f0f6f9;
 }
 .auditor-markdown code {
   font-family: monospace;
   font-size: 0.95em;
-  background: #edf2e6;
+  background: #edf4f8;
   padding: 2px 4px;
   border-radius: 3px;
 }
 .auditor-markdown pre {
   max-width: 100%;
   overflow-x: auto;
-  background: #edf2e6;
+  background: #edf4f8;
   padding: 12px;
   border-radius: 6px;
   white-space: pre;
 }
 .auditor-markdown pre code { padding: 0; }
-.auditor-markdown a { color: #3e642d; text-decoration: underline; }
+.auditor-markdown a { color: #238294; text-decoration: underline; }
 .auditor-markdown .markdown-table { max-width: 100%; overflow-x: auto; margin: 12px 0; }
 .auditor-markdown table { width: 100%; border-collapse: collapse; font-size: inherit; }
-.auditor-markdown :is(th, td) { border: 1px solid #dce4d2; padding: 8px 10px; text-align: left; }
-.auditor-markdown th { background: #edf2e6; }
-.auditor-markdown hr { border: 0; border-top: 1px solid #dce4d2; margin: 18px 0; }
+.auditor-markdown :is(th, td) { border: 1px solid #dce5ec; padding: 8px 10px; text-align: left; }
+.auditor-markdown th { background: #edf4f8; }
+.auditor-markdown hr { border: 0; border-top: 1px solid #dce5ec; margin: 18px 0; }
 .auditor-markdown > :first-child { margin-top: 0; }
 .auditor-markdown > :last-child { margin-bottom: 0; }
