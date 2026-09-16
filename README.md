@@ -135,4 +135,4 @@ Use only the evaluator's frozen reporting seeds for held-out claims. See [record
 | [specs/student-materials/](specs/student-materials/) | Supplied hackathon formats and requirements. |
 | [docs/](docs/) | Input contracts, setup, privacy, verification and presentation material. |
 
-The [challenge brief](HackMTY_2026_Infosys_Challenge_Forensic.md) defines the problem. The [implementation plan](IMPLEMENTATION_PLAN.md) records delivery status and design history. [AGENTS.md](AGENTS.md) contains contributor guidance.
+The [challenge brief](HackMTY_2026_Infosys_Challenge_Forensic.md) defines the problem. The [implementation plan](IMPLEMENTATION_PLAN.md) records delivery status and design history. [AGENTS.md](AGENTS.md) contains contributor guidance
